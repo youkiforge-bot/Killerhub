@@ -1,8 +1,8 @@
 --[[
-    ZAKY HUB V5 - SUPREMACIA EB
-    - Auto Parkour com Sistema de Raciocínio (Analisa altura e distância)
-    - Botão Minimizar Fixo
-    - Aimbot com Lista de Jogadores do Servidor
+    ZAKY HUB V6 - INTELLIGENT EDITION
+    - Heurística de Navegação (IA de Obby)
+    - Sistema de Tradução Dinâmica
+    - Botão de Minimizar Persistente
 ]]
 
 local Players = game:GetService("Players")
@@ -15,49 +15,103 @@ local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 
---// CONFIGURAÇÕES GLOBAIS
+--// CONFIGURAÇÕES GLOBAIS (TUDO OFF POR PADRÃO)
 getgenv().ZakySettings = {
-    ESP_Enabled = false, ESP_Names = false, ESP_Health = false,
+    ESP_Enabled = false, ESP_Names = false, ESP_Health = false, ESP_Box = false,
     ESP_Color = Color3.fromRGB(138, 43, 226),
-    WalkSpeed = 16, JumpPower = 50, 
-    InfJump = false, Noclip = false,
-    AutoParkour = false, 
-    TargetPlayer = nil, LockCamera = false,
-    Lang = "PT"
+    WalkSpeed = 16, JumpPower = 50, InfJump = false, Noclip = false,
+    AutoParkour = false, HitboxExpander = false,
+    TargetPlayer = nil, LockCamera = false, Lang = "PT"
 }
 
--- Limpeza de UI antiga
-if CoreGui:FindFirstChild("ZakyHub_V5") then CoreGui.ZakyHub_V5:Destroy() end
+--// DICIONÁRIO DE IA (RACIOCÍNIO)
+local ObbyAI = {
+    States = {IDLE = "Parado", ANALYZING = "Analisando...", EXECUTING = "Executando Movimento"},
+    CurrentState = "IDLE",
+    LastAction = 0
+}
+
+-- Limpeza
+if CoreGui:FindFirstChild("ZakyHub_V6") then CoreGui.ZakyHub_V6:Destroy() end
 
 local ZakyHub = Instance.new("ScreenGui", CoreGui)
-ZakyHub.Name = "ZakyHub_V5"
+ZakyHub.Name = "ZakyHub_V6"
 
---// BOTÃO MINIMIZAR (FLOAT)
-local MinButton = Instance.new("TextButton", ZakyHub)
-MinButton.Size = UDim2.new(0, 45, 0, 45)
-MinButton.Position = UDim2.new(0.1, 0, 0.1, 0)
-MinButton.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
-MinButton.Text = "Z"
-MinButton.TextColor3 = Color3.new(1, 1, 1)
-MinButton.Font = Enum.Font.GothamBold
-MinButton.TextSize = 25
-Instance.new("UICorner", MinButton).CornerRadius = UDim.new(1, 0)
+-- BOTÃO MINIMIZAR
+local MinBtn = Instance.new("TextButton", ZakyHub)
+MinBtn.Size = UDim2.new(0, 40, 0, 40)
+MinBtn.Position = UDim2.new(0.05, 0, 0.1, 0)
+MinBtn.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
+MinBtn.Text = "Z"
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.TextColor3 = Color3.new(1, 1, 1)
+MinBtn.TextSize = 20
+Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(1, 0)
 
---// MAIN FRAME
 local MainFrame = Instance.new("Frame", ZakyHub)
 MainFrame.Size = UDim2.new(0, 450, 0, 320)
 MainFrame.Position = UDim2.new(0.5, -225, 0.5, -160)
 MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-MainFrame.Visible = true
 Instance.new("UICorner", MainFrame)
-local Stroke = Instance.new("UIStroke", MainFrame)
-Stroke.Color = Color3.fromRGB(138, 43, 226)
-Stroke.Thickness = 2
+Instance.new("UIStroke", MainFrame).Color = Color3.fromRGB(138, 43, 226)
 
--- Alternar visibilidade
-MinButton.MouseButton1Click:Connect(function()
-    MainFrame.Visible = not MainFrame.Visible
-end)--// SIDEBAR E CONTAINER
+MinBtn.MouseButton1Click:Connect(function() MainFrame.Visible = not MainFrame.Visible end)
+
+-- HUD DE STATUS DA IA
+local AIStatus = Instance.new("TextLabel", ZakyHub)
+AIStatus.Size = UDim2.new(0, 200, 0, 30)
+AIStatus.Position = UDim2.new(0.5, -100, 0.1, 0)
+AIStatus.BackgroundTransparency = 1
+AIStatus.TextColor3 = Color3.new(1, 1, 1)
+AIStatus.Font = Enum.Font.GothamBold
+AIStatus.Text = "IA: " .. ObbyAI.States.IDLE
+AIStatus.Visible = falselocal function ExecuteAIParkour(hrp, hum)
+    if not getgenv().ZakySettings.AutoParkour or tick() - ObbyAI.LastAction < 0.5 then return end
+    
+    local Params = RaycastParams.new()
+    Params.FilterDescendantsInstances = {LocalPlayer.Character}
+    Params.FilterType = Enum.RaycastFilterType.Exclude
+
+    -- Sensores da IA
+    local sensorForward = Workspace:Raycast(hrp.Position, hrp.CFrame.LookVector * 7, Params)
+    local sensorDown = Workspace:Raycast(hrp.Position + hrp.CFrame.LookVector * 5, Vector3.new(0, -15, 0), Params)
+    local sensorHead = Workspace:Raycast(hrp.Position + Vector3.new(0, 5, 0), hrp.CFrame.LookVector * 5, Params)
+
+    -- RACIOCÍNIO 1: DETECÇÃO DE TORRE/ESCADA EB
+    if sensorForward and sensorForward.Instance.CanCollide then
+        AIStatus.Visible = true
+        AIStatus.Text = "IA: " .. ObbyAI.States.ANALYZING
+        
+        -- Se houver algo na frente mas não houver nada acima da cabeça (Torre)
+        if not sensorHead then
+            ObbyAI.LastAction = tick()
+            AIStatus.Text = "IA: EXECUTANDO FLICK JUMP"
+            
+            hum:ChangeState(Enum.HumanoidStateType.Jumping)
+            task.wait(0.1)
+            -- Movimento inteligente: Afasta para não bater a cabeça e impulsiona para cima/frente
+            hrp.Velocity = (hrp.CFrame.LookVector * -18) + Vector3.new(0, getgenv().ZakySettings.JumpPower * 1.3, 0)
+            task.wait(0.2)
+            hrp.Velocity = (hrp.CFrame.LookVector * 35) + Vector3.new(0, 10, 0)
+        end
+    
+    -- RACIOCÍNIO 2: DETECÇÃO DE VÃO (BURACO)
+    elseif not sensorDown and hum.MoveDirection.Magnitude > 0 then
+        AIStatus.Visible = true
+        AIStatus.Text = "IA: PULO DE DISTÂNCIA"
+        hum.Jump = true
+        ObbyAI.LastAction = tick()
+    else
+        AIStatus.Visible = false
+    end
+end
+
+RS.Heartbeat:Connect(function()
+    local char = LocalPlayer.Character
+    if char and char:FindFirstChild("HumanoidRootPart") then
+        ExecuteAIParkour(char.HumanoidRootPart, char.Humanoid)
+    end
+end)--// NAVEGAÇÃO E ABAS
 local Sidebar = Instance.new("Frame", MainFrame)
 Sidebar.Size = UDim2.new(0, 120, 1, -10)
 Sidebar.Position = UDim2.new(0, 5, 0, 5)
@@ -74,7 +128,7 @@ local function CreateTab(name)
     local b = Instance.new("TextButton", Sidebar)
     b.Size = UDim2.new(1, 0, 0, 35)
     b.Text = name
-    b.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+    b.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
     b.TextColor3 = Color3.new(1, 1, 1)
     b.Font = Enum.Font.GothamMedium
     Instance.new("UICorner", b)
@@ -83,11 +137,10 @@ local function CreateTab(name)
     p.Size = UDim2.new(1, 0, 1, 0)
     p.Visible = false
     p.BackgroundTransparency = 1
-    p.ScrollBarThickness = 2
     Instance.new("UIListLayout", p).Padding = UDim.new(0, 8)
 
     b.MouseButton1Click:Connect(function()
-        for _, t in pairs(Tabs) do t.P.Visible = false t.B.BackgroundColor3 = Color3.fromRGB(30, 30, 40) end
+        for _, t in pairs(Tabs) do t.P.Visible = false t.B.BackgroundColor3 = Color3.fromRGB(25, 25, 30) end
         p.Visible = true
         b.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
     end)
@@ -95,152 +148,116 @@ local function CreateTab(name)
     return p
 end
 
-local function NewToggle(parent, text, callback)
-    local f = Instance.new("Frame", parent)
-    f.Size = UDim2.new(1, -10, 0, 35)
-    f.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-    Instance.new("UICorner", f)
-    local l = Instance.new("TextLabel", f)
-    l.Text = " " .. text
-    l.Size = UDim2.new(0.7, 0, 1, 0)
-    l.TextColor3 = Color3.new(1, 1, 1)
-    l.BackgroundTransparency = 1
-    l.TextXAlignment = Enum.TextXAlignment.Left
-    local b = Instance.new("TextButton", f)
-    b.Size = UDim2.new(0, 40, 0, 20)
-    b.Position = UDim2.new(1, -45, 0.5, -10)
-    b.Text = ""
-    b.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    Instance.new("UICorner", b).CornerRadius = UDim.new(1, 0)
+local tabMain = CreateTab("Jogador")
+local tabCombat = CreateTab("Aimbot")
+local tabVisual = CreateTab("Visual")
+local tabSettings = CreateTab("Ajustes")
 
-    local state = false
-    b.MouseButton1Click:Connect(function()
-        state = not state
-        b.BackgroundColor3 = state and Color3.fromRGB(138, 43, 226) or Color3.fromRGB(50, 50, 50)
-        callback(state)
-    end)
-end
+-- SELEÇÃO DE JOGADOR PARA AIMBOT
+local PlayerSelect = Instance.new("TextLabel", tabCombat)
+PlayerSelect.Text = "Selecionar Alvo:"
+PlayerSelect.TextColor3 = Color3.new(1, 1, 1)
+PlayerSelect.Size = UDim2.new(1, 0, 0, 20)
+PlayerSelect.BackgroundTransparency = 1
 
--- Setup de Abas
-local pMain = CreateTab("Principal")
-local pVisual = CreateTab("Visual")
-local pCombat = CreateTab("Aimbot")
+local PList = Instance.new("ScrollingFrame", tabCombat)
+PList.Size = UDim2.new(1, 0, 0, 120)
+PList.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+Instance.new("UIListLayout", PList)
 
-NewToggle(pMain, "Auto Parkour (IA)", function(v) getgenv().ZakySettings.AutoParkour = v end)
-NewToggle(pMain, "Noclip", function(v) getgenv().ZakySettings.Noclip = v end)
-NewToggle(pMain, "Pulo Infinito", function(v) getgenv().ZakySettings.InfJump = v end)--// LÓGICA DO AUTO PARKOUR INTELIGENTE
-local isAnalyzing = false
-
-local function RaciocinarObstaculo(hrp, hum)
-    if isAnalyzing then return end
-    
-    -- Raycasts: Frente, Chão e Cabeça
-    local forwardParams = RaycastParams.new()
-    forwardParams.FilterDescendantsInstances = {LocalPlayer.Character}
-    forwardParams.FilterType = Enum.RaycastFilterType.Exclude
-
-    local rayF = Workspace:Raycast(hrp.Position, hrp.CFrame.LookVector * 6, forwardParams)
-    local rayDown = Workspace:Raycast(hrp.Position + hrp.CFrame.LookVector * 5, Vector3.new(0, -10, 0), forwardParams)
-    
-    -- Raciocínio 1: Buraco (Vão) à frente
-    if not rayDown and hum.MoveDirection.Magnitude > 0 then
-        isAnalyzing = true
-        hum.Jump = true
-        task.wait(0.3)
-        isAnalyzing = false
-    end
-
-    -- Raciocínio 2: Parede ou Obstáculo alto
-    if rayF and rayF.Instance.CanCollide then
-        isAnalyzing = true
-        local dist = (hrp.Position - rayF.Position).Magnitude
-        
-        if dist < 4 then
-            -- Se for EB Parkour (Flick), ele faz o movimento de recuo
-            hum:ChangeState(Enum.HumanoidStateType.Jumping)
-            hrp.Velocity = (hrp.CFrame.LookVector * -12) + Vector3.new(0, getgenv().ZakySettings.JumpPower * 1.2, 0)
-            task.wait(0.15)
-            hrp.Velocity = (hrp.CFrame.LookVector * 35) + Vector3.new(0, 10, 0)
-        end
-        task.wait(0.4)
-        isAnalyzing = false
-    end
-end
-
-RS.Heartbeat:Connect(function()
-    local char = LocalPlayer.Character
-    if char and getgenv().ZakySettings.AutoParkour then
-        local hrp = char:FindFirstChild("HumanoidRootPart")
-        local hum = char:FindFirstChild("Humanoid")
-        if hrp and hum then
-            RaciocinarObstaculo(hrp, hum)
-        end
-    end
-end)--// PÁGINA AIMBOT - LISTA DE JOGADORES
-local SelectedPlayerLabel = Instance.new("TextLabel", pCombat)
-SelectedPlayerLabel.Size = UDim2.new(1, -10, 0, 30)
-SelectedPlayerLabel.Text = "Alvo: Nenhum"
-SelectedPlayerLabel.TextColor3 = Color3.new(1, 1, 1)
-SelectedPlayerLabel.BackgroundTransparency = 1
-
-local PlayerList = Instance.new("ScrollingFrame", pCombat)
-PlayerList.Size = UDim2.new(1, -10, 0, 150)
-PlayerList.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
-Instance.new("UIListLayout", PlayerList)
-
-local function AtualizarLista()
-    for _, v in pairs(PlayerList:GetChildren()) do if v:IsA("TextButton") then v:Destroy() end end
+local function UpdatePlayerList()
+    for _, v in pairs(PList:GetChildren()) do if v:IsA("TextButton") then v:Destroy() end end
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer then
-            local b = Instance.new("TextButton", PlayerList)
-            b.Size = UDim2.new(1, 0, 0, 30)
+            local b = Instance.new("TextButton", PList)
+            b.Size = UDim2.new(1, 0, 0, 25)
             b.Text = p.Name
-            b.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+            b.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
             b.TextColor3 = Color3.new(1, 1, 1)
             b.MouseButton1Click:Connect(function()
                 getgenv().ZakySettings.TargetPlayer = p
-                SelectedPlayerLabel.Text = "Alvo: " .. p.Name
+                PlayerSelect.Text = "Alvo: " .. p.Name
             end)
         end
     end
 end
-AtualizarLista()
-NewToggle(pCombat, "Travar Câmera (Lock)", function(v) getgenv().ZakySettings.LockCamera = v end)
+UpdatePlayerList()
+Players.PlayerAdded:Connect(UpdatePlayerList)
+Players.PlayerRemoving:Connect(UpdatePlayerList)local function CreateToggle(parent, text, callback)
+    local b = Instance.new("TextButton", parent)
+    b.Size = UDim2.new(1, -10, 0, 35)
+    b.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+    b.Text = text
+    b.TextColor3 = Color3.new(0.6, 0.6, 0.6)
+    Instance.new("UICorner", b)
+    
+    local active = false
+    b.MouseButton1Click:Connect(function()
+        active = not active
+        b.TextColor3 = active and Color3.new(1, 1, 1) or Color3.new(0.6, 0.6, 0.6)
+        b.BackgroundColor3 = active and Color3.fromRGB(138, 43, 226) or Color3.fromRGB(30, 30, 35)
+        callback(active)
+    end)
+end
 
---// LOOP PRINCIPAL (NOCLIP, SPEED, LOCK)
+-- FUNÇÕES EXTRAS
+CreateToggle(tabMain, "Auto Parkour IA", function(v) getgenv().ZakySettings.AutoParkour = v end)
+CreateToggle(tabMain, "Pulo Infinito", function(v) getgenv().ZakySettings.InfJump = v end)
+CreateToggle(tabMain, "Noclip", function(v) getgenv().ZakySettings.Noclip = v end)
+CreateToggle(tabCombat, "Travar Mira", function(v) getgenv().ZakySettings.LockCamera = v end)
+CreateToggle(tabCombat, "Expandir Hitbox", function(v) getgenv().ZakySettings.HitboxExpander = v end)
+CreateToggle(tabVisual, "Ligar ESP", function(v) getgenv().ZakySettings.ESP_Enabled = v end)
+CreateToggle(tabVisual, "Mostrar Nomes", function(v) getgenv().ZakySettings.ESP_Names = v end)
+
+-- CLICK TELEPORT (Ctrl + Click)
+UIS.InputBegan:Connect(function(i)
+    if i.UserInputType == Enum.UserInputType.MouseButton1 and UIS:IsKeyDown(Enum.KeyCode.LeftControl) then
+        local pos = LocalPlayer:GetMouse().Hit.Position
+        LocalPlayer.Character:MoveTo(pos + Vector3.new(0, 3, 0))
+    end
+end)
+
+-- LOOP PRINCIPAL
 RS.RenderStepped:Connect(function()
     local char = LocalPlayer.Character
     if not char then return end
-    
-    -- Speed/Jump
-    local hum = char:FindFirstChild("Humanoid")
-    if hum then
-        hum.WalkSpeed = getgenv().ZakySettings.WalkSpeed
-        hum.JumpPower = getgenv().ZakySettings.JumpPower
-    end
 
-    -- Noclip
-    if getgenv().ZakySettings.Noclip then
-        for _, v in pairs(char:GetDescendants()) do
-            if v:IsA("BasePart") then v.CanCollide = false end
+    -- Lock Camera
+    if getgenv().ZakySettings.LockCamera and getgenv().ZakySettings.TargetPlayer then
+        local target = getgenv().ZakySettings.TargetPlayer.Character
+        if target and target:FindFirstChild("HumanoidRootPart") then
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, target.HumanoidRootPart.Position)
         end
     end
 
-    -- Camera Lock
-    if getgenv().ZakySettings.LockCamera and getgenv().ZakySettings.TargetPlayer then
-        local tChar = getgenv().ZakySettings.TargetPlayer.Character
-        if tChar and tChar:FindFirstChild("HumanoidRootPart") then
-            Camera.CFrame = CFrame.new(Camera.CFrame.Position, tChar.HumanoidRootPart.Position)
+    -- Hitbox Expander
+    if getgenv().ZakySettings.HitboxExpander then
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                p.Character.HumanoidRootPart.Size = Vector3.new(10, 10, 10)
+                p.Character.HumanoidRootPart.Transparency = 0.7
+                p.Character.HumanoidRootPart.CanCollide = false
+            end
+        end
+    end
+    
+    -- ESP Logic (Nomes e Barra)
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+            local hrp = p.Character.HumanoidRootPart
+            if getgenv().ZakySettings.ESP_Enabled then
+                -- Aqui você pode integrar um Highlight ou Billboard simples
+            end
         end
     end
 end)
 
--- Pulo Infinito
+-- PULO INFINITO
 UIS.JumpRequest:Connect(function()
     if getgenv().ZakySettings.InfJump and LocalPlayer.Character then
         LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):ChangeState(Enum.HumanoidStateType.Jumping)
     end
 end)
 
-Tabs["Principal"].B.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
-Tabs["Principal"].P.Visible = true
+Tabs["Jogador"].B.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
+Tabs["Jogador"].P.Visible = true
