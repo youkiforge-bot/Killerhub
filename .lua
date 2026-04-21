@@ -1,6 +1,6 @@
 --[[
-    ZakyHub V2 - Premium Mobile Edition
-    Design Moderno, Funções EB, Auto-Parkour e Inputs Diretos.
+    ZakyHub V3 - EB Premium Edition
+    Auto-Parkour Avançado, Flicks em Torres e Funções Inativas por Padrão.
 ]]
 
 local Players = game:GetService("Players")
@@ -14,30 +14,30 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 local Mouse = LocalPlayer:GetMouse()
 
---// VARIÁVEIS DE ESTADO
+--// 1. TUDO DESATIVADO POR PADRÃO
 local _G = getgenv and getgenv() or _G
 _G.ZakySettings = {
-    -- ESP
-    ESP_Enabled = false, ESP_Names = true, ESP_Dist = true, 
-    ESP_Health = true, ESP_Box = true, ESP_Tracers = false, ESP_MaxDist = 1000,
-    ESP_Color = Color3.fromRGB(138, 43, 226), -- Roxo Neon
+    -- ESP (Tudo OFF)
+    ESP_Enabled = false, ESP_Names = false, ESP_Dist = false, 
+    ESP_Health = false, ESP_Box = false, ESP_Tracers = false, ESP_MaxDist = 1000,
+    ESP_Color = Color3.fromRGB(138, 43, 226), 
     
-    -- Player
+    -- Player (Valores padrão do Roblox, Hacks OFF)
     WalkSpeed = 16, JumpPower = 50, InfJump = false, Noclip = false,
     
-    -- EB Hacks
+    -- EB Hacks (OFF)
     HitboxExpander = false,
     
-    -- Auto Parkour
+    -- Auto Parkour (OFF)
     AutoParkour = false
 }
 
 -- Limpeza de instâncias antigas
-if CoreGui:FindFirstChild("ZakyHub_V2") then
-    CoreGui.ZakyHub_V2:Destroy()
+if CoreGui:FindFirstChild("ZakyHub_V3") then
+    CoreGui.ZakyHub_V3:Destroy()
 end
 
---// FUNÇÕES AUXILIARES
+--// FUNÇÕES AUXILIARES DE UI
 local function MakeDraggable(frame, parent)
     local dragging, dragInput, dragStart, startPos
     frame.InputBegan:Connect(function(input)
@@ -64,13 +64,13 @@ end
 
 --// INTERFACE PRINCIPAL
 local ZakyHub = Instance.new("ScreenGui")
-ZakyHub.Name = "ZakyHub_V2"
+ZakyHub.Name = "ZakyHub_V3"
 ZakyHub.Parent = CoreGui
 ZakyHub.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
 local MainFrame = Instance.new("Frame", ZakyHub)
 MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 22)
-MainFrame.BackgroundTransparency = 0.1 -- Efeito de vidro escuro
+MainFrame.BackgroundTransparency = 0.1
 MainFrame.BorderSizePixel = 0
 MainFrame.Position = UDim2.new(0.5, -225, 0.5, -160)
 MainFrame.Size = UDim2.new(0, 450, 0, 320)
@@ -90,15 +90,14 @@ Instance.new("UICorner", TopBar).CornerRadius = UDim.new(0, 12)
 MakeDraggable(TopBar, MainFrame)
 
 local Title = Instance.new("TextLabel", TopBar)
-Title.Text = "  ZAKY HUB V2"
+Title.Text = "  ZAKY HUB V3 (EB EDITION)"
 Title.Font = Enum.Font.GothamBold
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.TextSize = 20
-Title.Size = UDim2.new(0.5, 0, 1, 0)
+Title.TextSize = 18
+Title.Size = UDim2.new(0.7, 0, 1, 0)
 Title.BackgroundTransparency = 1
 Title.TextXAlignment = Enum.TextXAlignment.Left
 
--- Degradê no Título
 local UIGradient = Instance.new("UIGradient", Title)
 UIGradient.Color = ColorSequence.new{
     ColorSequenceKeypoint.new(0, Color3.fromRGB(138, 43, 226)),
@@ -128,7 +127,7 @@ Instance.new("UICorner", FloatBtn).CornerRadius = UDim.new(1, 0)
 Instance.new("UIStroke", FloatBtn).Thickness = 2
 MakeDraggable(FloatBtn, FloatBtn)
 
---// SISTEMA DE NAVEGAÇÃO
+--// NAVEGAÇÃO
 local NavBar = Instance.new("ScrollingFrame", MainFrame)
 NavBar.Position = UDim2.new(0, 10, 0, 55)
 NavBar.Size = UDim2.new(0, 120, 1, -65)
@@ -261,7 +260,7 @@ local function CreateInput(parent, text, defaultVal, callback)
         if val then
             callback(val)
         else
-            input.Text = tostring(defaultVal) -- Restaura se for texto inválido
+            input.Text = tostring(defaultVal)
         end
     end)
     parent.CanvasSize = UDim2.new(0, 0, 0, parent.UIListLayout.AbsoluteContentSize.Y + 20)
@@ -277,22 +276,15 @@ local MiscP = CreateTab("Outros")
 CreateInput(PlayerP, "Velocidade (WalkSpeed)", 16, function(v) _G.ZakySettings.WalkSpeed = v end)
 CreateInput(PlayerP, "Pulo (JumpPower)", 50, function(v) _G.ZakySettings.JumpPower = v end)
 CreateToggle(PlayerP, "Pulo Infinito", false, function(v) _G.ZakySettings.InfJump = v end)
-CreateToggle(PlayerP, "Atravessar Paredes (Noclip)", false, function(v) _G.ZakySettings.Noclip = v end)
+CreateToggle(PlayerP, "Atravessar Paredes", false, function(v) _G.ZakySettings.Noclip = v end)
+CreateToggle(PlayerP, "Auto Parkour (Torres/Gaps)", false, function(v) _G.ZakySettings.AutoParkour = v end)
 
--- NOVO FLY INTEGRADO
 CreateButton(PlayerP, "Ativar FlyGui V3", function()
-    local success, err = pcall(function()
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/XNEOFF/FlyGuiV3/main/FlyGuiV3.txt"))()
-    end)
-    if not success then warn("Erro ao carregar Fly: " .. tostring(err)) end
+    pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/XNEOFF/FlyGuiV3/main/FlyGuiV3.txt"))() end)
 end)
-
--- AUTO PARKOUR
-CreateToggle(PlayerP, "Auto Parkour Inteligente", false, function(v) _G.ZakySettings.AutoParkour = v end)
 
 --// PÁGINA: HACKS (EXÉRCITO BRASILEIRO)
 CreateButton(EBP, "Bypass: Destruir Portas/Grades", function()
-    -- Procura por objetos comuns em bases militares e os remove ou tira a colisão
     for _, obj in pairs(Workspace:GetDescendants()) do
         if obj:IsA("BasePart") then
             local name = string.lower(obj.Name)
@@ -305,7 +297,7 @@ CreateButton(EBP, "Bypass: Destruir Portas/Grades", function()
     end
 end)
 
-CreateToggle(EBP, "Aura/Hitbox Expander (Corpo a Corpo)", false, function(v)
+CreateToggle(EBP, "Hitbox Expander (Corpo a Corpo)", false, function(v)
     _G.ZakySettings.HitboxExpander = v
 end)
 
@@ -323,24 +315,63 @@ end)
 
 --// PÁGINA: VISUAL ESP
 CreateToggle(VisualP, "Ligar ESP", false, function(v) _G.ZakySettings.ESP_Enabled = v end)
-CreateToggle(VisualP, "Mostrar Nomes", true, function(v) _G.ZakySettings.ESP_Names = v end)
-CreateToggle(VisualP, "Mostrar Caixas", true, function(v) _G.ZakySettings.ESP_Box = v end)
+CreateToggle(VisualP, "Mostrar Nomes", false, function(v) _G.ZakySettings.ESP_Names = v end)
+CreateToggle(VisualP, "Mostrar Caixas", false, function(v) _G.ZakySettings.ESP_Box = v end)
 
---// PÁGINA: OUTROS
-local CustomCode = Instance.new("TextBox", MiscP)
-CustomCode.Size = UDim2.new(1, -10, 0, 100)
-CustomCode.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-CustomCode.Text = "-- Cole scripts extras aqui"
-CustomCode.TextColor3 = Color3.new(1, 1, 1)
-CustomCode.ClearTextOnFocus = false
-CustomCode.MultiLine = true
-CustomCode.TextYAlignment = Enum.TextYAlignment.Top
-Instance.new("UICorner", CustomCode).CornerRadius = UDim.new(0, 6)
-Instance.new("UIStroke", CustomCode).Color = Color3.fromRGB(138, 43, 226)
+--// LÓGICA DO AUTO PARKOUR (STATE MACHINE)
+local isDoingAction = false
 
-CreateButton(MiscP, "Executar", function()
-    pcall(function() loadstring(CustomCode.Text)() end)
-end)
+local function HandleAutoParkour(char, hrp, hum)
+    if not _G.ZakySettings.AutoParkour or isDoingAction then return end
+    if hum.MoveDirection.Magnitude == 0 then return end -- Só funciona se estiver andando
+
+    local rayOrigin = hrp.Position
+    local lookVector = hrp.CFrame.LookVector
+    
+    local params = RaycastParams.new()
+    params.FilterDescendantsInstances = {char}
+    params.FilterType = Enum.RaycastFilterType.Exclude
+
+    -- Raio para frente (detecta paredes/torres)
+    local forwardRay = Workspace:Raycast(rayOrigin, lookVector * 3.5, params)
+    
+    -- Raio para baixo à frente (detecta buracos/gaps)
+    local downRayOrigin = rayOrigin + (lookVector * 4)
+    local downRay = Workspace:Raycast(downRayOrigin, Vector3.new(0, -6, 0), params)
+
+    -- 1. Detecção de Torre (Parede Alta na Frente)
+    if forwardRay then
+        local hitPart = forwardRay.Instance
+        if hitPart and hitPart.CanCollide then
+            -- Inicia a manobra de Flick (Torre)
+            isDoingAction = true
+            task.spawn(function()
+                -- Pula
+                hum:ChangeState(Enum.HumanoidStateType.Jumping)
+                task.wait(0.05)
+                
+                -- Impulso para trás (evita bater a cabeça no degrau)
+                hrp.Velocity = (lookVector * -15) + Vector3.new(0, hum.JumpPower, 0)
+                task.wait(0.2)
+                
+                -- Impulso para frente (encaixa no andar de cima)
+                hrp.Velocity = (lookVector * 25) + Vector3.new(0, hrp.Velocity.Y, 0)
+                task.wait(0.4)
+                isDoingAction = false
+            end)
+            return
+        end
+    end
+
+    -- 2. Detecção de Buraco (Gap Jump)
+    if not downRay then
+        if hum:GetState() ~= Enum.HumanoidStateType.Freefall and hum:GetState() ~= Enum.HumanoidStateType.Jumping then
+            hum:ChangeState(Enum.HumanoidStateType.Jumping)
+            -- Pequeno boost horizontal para garantir que chegue do outro lado
+            hrp.Velocity = hrp.Velocity + (lookVector * 10)
+        end
+    end
+end
 
 --// LÓGICA CORE (RunService)
 RS.RenderStepped:Connect(function()
@@ -352,9 +383,7 @@ RS.RenderStepped:Connect(function()
 
     -- Updates Player
     hum.WalkSpeed = _G.ZakySettings.WalkSpeed
-    if hum.UseJumpPower ~= nil then
-        hum.UseJumpPower = true
-    end
+    if hum.UseJumpPower ~= nil then hum.UseJumpPower = true end
     hum.JumpPower = _G.ZakySettings.JumpPower
 
     -- Noclip
@@ -366,7 +395,7 @@ RS.RenderStepped:Connect(function()
         end
     end
 
-    -- Hitbox Expander (Griefing para EB)
+    -- Hitbox Expander
     if _G.ZakySettings.HitboxExpander then
         for _, p in pairs(Players:GetPlayers()) do
             if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
@@ -378,31 +407,8 @@ RS.RenderStepped:Connect(function()
         end
     end
 
-    -- Auto Parkour Inteligente
-    if _G.ZakySettings.AutoParkour then
-        local rayOrigin = hrp.Position
-        local rayDirection = hrp.CFrame.LookVector * 4 -- Olha 4 studs a frente
-        local rayDownDirection = Vector3.new(0, -5, 0) -- Olha 5 studs para baixo
-
-        -- Verifica se há um buraco na frente
-        local raycastParams = RaycastParams.new()
-        raycastParams.FilterDescendantsInstances = {char}
-        raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-
-        local obstacleForward = Workspace:Raycast(rayOrigin, rayDirection, raycastParams)
-        local groundAhead = Workspace:Raycast(rayOrigin + rayDirection, rayDownDirection, raycastParams)
-
-        -- Se houver parede na frente OU buraco no chão à frente (e o player estiver andando)
-        if hum.MoveDirection.Magnitude > 0 then
-            if obstacleForward or not groundAhead then
-                if hum:GetState() ~= Enum.HumanoidStateType.Freefall and hum:GetState() ~= Enum.HumanoidStateType.Jumping then
-                    hum:ChangeState(Enum.HumanoidStateType.Jumping)
-                    -- Pequeno boost para atravessar o gap
-                    hrp.Velocity = hrp.Velocity + (hrp.CFrame.LookVector * 20)
-                end
-            end
-        end
-    end
+    -- Chamada do Auto Parkour Inteligente
+    HandleAutoParkour(char, hrp, hum)
 end)
 
 -- Inf Jump
@@ -412,7 +418,7 @@ UIS.JumpRequest:Connect(function()
     end
 end)
 
---// ESP SYSTEM (Desenho 2D / Fallback Highlight)
+--// ESP SYSTEM (Highlight)
 local function ManageESP()
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer then
@@ -433,7 +439,6 @@ local function ManageESP()
         end
     end
 end
-
 RS.Heartbeat:Connect(ManageESP)
 
 --// SISTEMA DE MINIMIZAR / MAXIMIZAR
@@ -454,10 +459,8 @@ FloatBtn.MouseButton1Click:Connect(function()
     }):Play()
 end)
 
--- Inicializa selecionando a primeira aba
+-- Iniciar
 Tabs["Jogador"].Btn:Click()
-
--- Animação de Entrada
 MainFrame.Size = UDim2.new(0, 0, 0, 0)
 TS:Create(MainFrame, TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
     Size = UDim2.new(0, 450, 0, 320)
