@@ -1,126 +1,116 @@
---[[
-    ZAKY AI - NEURAL STAR (FINAL EVOLUTION)
-    - Sensor 360° (Evita efeito "ping-pong")
-    - Inteligência de Navegação Estelar
-    - Auto-Correção de Trajetória
+--[[ 
+    ZAKY AI: THE SOVEREIGN 
+    Foco: Movimentação Autônoma e Raciocínio Espacial
 ]]
 
 local Players = game:GetService("Players")
 local RS = game:GetService("RunService")
 local TS = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
 local LocalPlayer = Players.LocalPlayer
 
-getgenv().ZakyAI = {
-    Active = false,
-    Thinking = false,
-    LastTarget = nil,
-    Speed = 30
-}
+-- Garantir que a UI anterior seja deletada
+if CoreGui:FindFirstChild("ZakySovereign") then CoreGui.ZakySovereign:Destroy() end
 
---// TERMINAL DE CONSCIÊNCIA
-local Screen = Instance.new("ScreenGui", game:GetService("CoreGui"))
+local Screen = Instance.new("ScreenGui", CoreGui)
+Screen.Name = "ZakySovereign"
+
+-- Janela de Pensamento
 local Main = Instance.new("Frame", Screen)
-Main.Size = UDim2.new(0, 320, 0, 200); Main.Position = UDim2.new(0, 20, 0.4, 0)
-Main.BackgroundColor3 = Color3.fromRGB(10, 10, 15); Main.Active = true; Main.Draggable = true
-Instance.new("UIStroke", Main).Color = Color3.fromRGB(0, 255, 255)
+Main.Size = UDim2.new(0, 280, 0, 180)
+Main.Position = UDim2.new(0.5, -140, 0.4, 0)
+Main.BackgroundColor3 = Color3.fromRGB(15, 15, 25)
+Main.Active = true
+Main.Draggable = true -- Para mover no celular
 
-local Display = Instance.new("TextLabel", Main)
-Display.Size = UDim2.new(1, -20, 1, -60); Display.Position = UDim2.new(0, 10, 0, 10)
-Display.TextColor3 = Color3.new(0, 1, 0.5); Display.Text = "Sistemas Prontos..."; Display.TextWrapped = true
-Display.Font = Enum.Font.Code; Display.BackgroundTransparency = 1; Display.TextYAlignment = Enum.TextYAlignment.Top
+local Corner = Instance.new("UICorner", Main)
+local Stroke = Instance.new("UIStroke", Main)
+Stroke.Color = Color3.fromRGB(0, 255, 255)
 
-local function Log(txt)
-    Display.Text = "🧠 IA PENSANDO:\n" .. txt
-endlocal function GetSafeDirection(targetPos)
-    local char = LocalPlayer.Character
-    local hrp = char.HumanoidRootPart
-    local rayParams = RaycastParams.new()
-    rayParams.FilterDescendantsInstances = {char}
-    
-    local finalDir = (targetPos - hrp.Position).Unit
-    local obstacleFound = false
+local Label = Instance.new("TextLabel", Main)
+Label.Size = UDim2.new(1, -20, 1, -60)
+Label.Position = UDim2.new(0, 10, 0, 10)
+Label.BackgroundTransparency = 1
+Label.TextColor3 = Color3.new(1, 1, 1)
+Label.Text = "Aguardando ativação neural..."
+Label.TextWrapped = true
+Label.Font = Enum.Font.Code
+Label.TextYAlignment = Enum.TextYAlignment.Top
 
-    -- Escaneamento Estelar (8 direções ao redor)
-    for i = 1, 8 do
-        local angle = math.rad(i * 45)
-        local dir = Vector3.new(math.cos(angle), 0, math.sin(angle))
-        local ray = workspace:Raycast(hrp.Position, dir * 5, rayParams)
-        
-        if ray and ray.Instance and ray.Instance.CanCollide then
-            -- Se detectar parede, gera um vetor de repulsão
-            finalDir = finalDir + (ray.Normal * 2)
-            obstacleFound = true
-        end
-    end
-    
-    return finalDir.Unit, obstacleFound
+-- Lógica de Inteligência
+local Active = false
+local function UpdateAI(msg)
+    Label.Text = "🧠 CONSCIÊNCIA:\n" .. msg
 end
 
-local function FindBestPlatform()
+local function GetNextStep()
     local char = LocalPlayer.Character
-    local hrp = char.HumanoidRootPart
-    local best = nil
-    local minDist = 300
+    if not char then return nil end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    
+    local target = nil
+    local bestDist = math.huge
     
     for _, v in pairs(workspace:GetDescendants()) do
         if v:IsA("BasePart") and v.CanCollide and v.Transparency < 0.5 then
+            -- Filtro de perigo (Nomes comuns de blocos que matam)
             local n = v.Name:lower()
-            -- Ignora perigos
             if not n:find("lava") and not n:find("kill") and v.Color ~= Color3.new(1,0,0) then
                 local dist = (hrp.Position - v.Position).Magnitude
-                -- Prioriza peças que estão à frente no Obby
-                if dist < minDist and dist > 5 and v.Position.Y >= hrp.Position.Y - 5 then
-                    minDist = dist
-                    best = v
+                if dist < 150 and dist > 4 and v.Position.Y >= hrp.Position.Y - 5 then
+                    if dist < bestDist then
+                        bestDist = dist
+                        target = v
+                    end
                 end
             end
         end
     end
-    return best
-    endlocal function RunAI()
-    if not getgenv().ZakyAI.Active then return end
-    local char = LocalPlayer.Character
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    
-    local target = FindBestPlatform()
-    if target then
-        local safeDir, hasObstacle = GetSafeDirection(target.Position)
-        local destination = hrp.Position + (safeDir * 10)
-        
-        if hasObstacle then
-            Log("Obstáculo detectado! Recalculando rota de desvio...")
+    return target
+end
+
+local function MoveLoop()
+    while Active do
+        task.wait(0.1)
+        local char = LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp then continue end
+
+        local target = GetNextStep()
+        if target then
+            UpdateAI("Alvo identificado: " .. target.Name .. "\nCalculando trajetória segura...")
+            
+            -- Movimentação por CFrame (Ignora obstáculos simples)
+            local targetPos = target.Position + Vector3.new(0, 5, 0)
+            local dist = (hrp.Position - targetPos).Magnitude
+            
+            local tween = TS:Create(hrp, TweenInfo.new(dist/25, Enum.EasingStyle.Linear), {CFrame = CFrame.new(targetPos)})
+            tween:Play()
+            tween.Completed:Wait()
         else
-            Log("Caminho livre. Avançando para: " .. target.Name)
+            UpdateAI("Escaneando... Nenhuma plataforma segura encontrada no alcance.")
         end
-        
-        -- Movimento Suave via CFrame
-        local moveTween = TS:Create(hrp, TweenInfo.new(0.3, Enum.EasingStyle.Linear), {
-            CFrame = CFrame.new(hrp.Position, hrp.Position + safeDir) * CFrame.new(0, 0, -getgenv().ZakyAI.Speed * 0.3)
-        })
-        moveTween:Play()
-    else
-        Log("Analisando... Procurando próxima plataforma segura.")
     end
 end
 
---// BOTÃO DE ATIVAÇÃO
+-- Botão
 local Btn = Instance.new("TextButton", Main)
-Btn.Size = UDim2.new(1, -20, 0, 40); Btn.Position = UDim2.new(0, 10, 1, -50)
-Btn.BackgroundColor3 = Color3.fromRGB(0, 255, 150); Btn.Text = "ATIVAR SUPER IA"
-Btn.TextColor3 = Color3.new(0,0,0); Btn.Font = Enum.Font.GothamBold; Instance.new("UICorner", Btn)
+Btn.Size = UDim2.new(1, -20, 0, 40)
+Btn.Position = UDim2.new(0, 10, 1, -50)
+Btn.BackgroundColor3 = Color3.fromRGB(0, 100, 200)
+Btn.Text = "DESPERTAR IA"
+Btn.TextColor3 = Color3.new(1, 1, 1)
+Instance.new("UICorner", Btn)
 
 Btn.MouseButton1Click:Connect(function()
-    getgenv().ZakyAI.Active = not getgenv().ZakyAI.Active
-    Btn.Text = getgenv().ZakyAI.Active and "IA OPERANDO..." or "ATIVAR SUPER IA"
-    Btn.BackgroundColor3 = getgenv().ZakyAI.Active and Color3.fromRGB(255, 50, 50) or Color3.fromRGB(0, 255, 150)
+    Active = not Active
+    Btn.Text = Active and "IA ATIVA" or "DESPERTAR IA"
+    Btn.BackgroundColor3 = Active and Color3.fromRGB(200, 0, 0) or Color3.fromRGB(0, 100, 200)
     
-    if getgenv().ZakyAI.Active then
-        Log("Consciência Neural Ativada.")
-        task.spawn(function()
-            while getgenv().ZakyAI.Active do
-                RunAI()
-                task.wait(0.1)
-            end
-        end)
+    if Active then
+        UpdateAI("Consciência desperta. Assumindo controle físico.")
+        task.spawn(MoveLoop)
+    else
+        UpdateAI("Sistemas desligados.")
     end
 end)
