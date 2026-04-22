@@ -1,160 +1,140 @@
 --[[
-    ZAKY AI - THE AUTONOMOUS BOT
-    - Foco 100% em Navegação e Tomada de Decisão
-    - Terminal de Pensamento em Tempo Real
-    - Lógica de Máquina de Estados (State Machine)
+    ZAKY AI: SINGULARITY (VONTADE PRÓPRIA TOTAL)
+    - Navegação Heurística de Alta Complexidade
+    - Terminal de Consciência em Tempo Real
+    - Auto-Adaptação Pós-Falha
 ]]
 
 local Players = game:GetService("Players")
 local RS = game:GetService("RunService")
-local Pathfinding = game:GetService("PathfindingService")
+local UIS = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
 
-getgenv().ZakyAI = {
+getgenv().ZakySingularity = {
     Active = false,
-    State = "STANDBY",
-    Target = nil,
-    LogHistory = {}
+    CurrentObjective = nil,
+    ConfidenceLevel = 1.0,
+    Memory = {}, -- Guarda locais de morte para evitar
+    ActionLog = {}
 }
 
---// CRIAÇÃO DO TERMINAL DE CONSCIÊNCIA
+--// INTERFACE DO TERMINAL NEURAL
 local Screen = Instance.new("ScreenGui", game:GetService("CoreGui"))
-Screen.Name = "ZakyAITerminal"
-
 local Main = Instance.new("Frame", Screen)
-Main.Size = UDim2.new(0, 350, 0, 250); Main.Position = UDim2.new(0.05, 0, 0.5, -125)
-Main.BackgroundColor3 = Color3.fromRGB(10, 10, 15); Main.Active = true; Main.Draggable = true
-Instance.new("UICorner", Main); Instance.new("UIStroke", Main).Color = Color3.fromRGB(0, 255, 255)
+Main.Size = UDim2.new(0, 380, 0, 280); Main.Position = UDim2.new(0.02, 0, 0.4, 0)
+Main.BackgroundColor3 = Color3.fromRGB(8, 8, 12); Main.Active = true; Main.Draggable = true
+Instance.new("UICorner", Main); Instance.new("UIStroke", Main).Color = Color3.fromRGB(0, 200, 255)
 
-local Title = Instance.new("TextLabel", Main)
-Title.Size = UDim2.new(1, 0, 0, 30); Title.BackgroundTransparency = 1
-Title.Text = "🧠 ZAKY AI: CÓRTEX DE DECISÃO"; Title.TextColor3 = Color3.fromRGB(0, 255, 255)
-Title.Font = Enum.Font.GothamBold
+local LogBox = Instance.new("ScrollingFrame", Main)
+LogBox.Size = UDim2.new(1, -20, 1, -80); LogBox.Position = UDim2.new(0, 10, 0, 10)
+LogBox.BackgroundTransparency = 1; LogBox.ScrollBarThickness = 2
+local Layout = Instance.new("UIListLayout", LogBox); Layout.Padding = UDim.new(0, 2)
 
-local LogScreen = Instance.new("ScrollingFrame", Main)
-LogScreen.Size = UDim2.new(1, -20, 1, -80); LogScreen.Position = UDim2.new(0, 10, 0, 35)
-LogScreen.BackgroundColor3 = Color3.fromRGB(5, 5, 8); LogScreen.ScrollBarThickness = 2
-Instance.new("UIListLayout", LogScreen).Padding = UDim.new(0, 2)
-
-local ToggleBtn = Instance.new("TextButton", Main)
-ToggleBtn.Size = UDim2.new(1, -20, 0, 35); ToggleBtn.Position = UDim2.new(0, 10, 1, -40)
-ToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 150); ToggleBtn.Text = "INICIAR CONSCIÊNCIA"
-ToggleBtn.TextColor3 = Color3.new(1,1,1); ToggleBtn.Font = Enum.Font.GothamBold; Instance.new("UICorner", ToggleBtn)
-
--- Função para a IA "Falar"
-local function AILog(text)
-    if #getgenv().ZakyAI.LogHistory > 20 then
-        getgenv().ZakyAI.LogHistory[1]:Destroy()
-        table.remove(getgenv().ZakyAI.LogHistory, 1)
+local function NeuralLog(msg)
+    local t = Instance.new("TextLabel", LogBox)
+    t.Size = UDim2.new(1, 0, 0, 18); t.BackgroundTransparency = 1
+    t.Text = "🧠 [LOG]: " .. msg; t.TextColor3 = Color3.new(0, 1, 1); t.Font = Enum.Font.Code
+    t.TextXAlignment = Enum.TextXAlignment.Left; t.TextScaled = true
+    if #LogBox:GetChildren() > 25 then LogBox:GetChildren()[2]:Destroy() end
+    LogBox.CanvasPosition = Vector2.new(0, 9999)
+end--// SCANNER DE GEOMETRIA COMPLEXA
+local function IsSafe(part)
+    if not part:IsA("BasePart") or not part.CanCollide or part.Transparency > 0.5 then return false end
+    local n = part.Name:lower()
+    if n:find("kill") or n:find("lava") or part.Color == Color3.new(1, 0, 0) then return false end
+    for _, failPos in pairs(getgenv().ZakySingularity.Memory) do
+        if (part.Position - failPos).Magnitude < 5 then return false end
     end
-    local msg = Instance.new("TextLabel", LogScreen)
-    msg.Size = UDim2.new(1, 0, 0, 15); msg.BackgroundTransparency = 1
-    msg.Text = "> " .. text; msg.TextColor3 = Color3.new(0.8, 0.8, 0.8); msg.TextXAlignment = Enum.TextXAlignment.Left
-    msg.Font = Enum.Font.Code
-    table.insert(getgenv().ZakyAI.LogHistory, msg)
-    LogScreen.CanvasPosition = Vector2.new(0, 9999)
-end--// SISTEMA DE PERCEPÇÃO VISUAL DA IA
-local function EvaluatePart(part, myPos)
-    -- Filtros de segurança da IA
-    if not part.CanCollide or part.Transparency == 1 then return false end
-    local name = part.Name:lower()
-    if name:find("kill") or name:find("lava") or part:FindFirstChildOfClass("TouchTransmitter") then return false end
-    
-    -- Avaliação de "Melhor Caminho" (Avançar no eixo principal do Obby)
-    local dir = (part.Position - myPos).Unit
-    local dist = (part.Position - myPos).Magnitude
-    
-    -- IA ignora coisas muito distantes, muito abaixo, ou atrás dela
-    if dist > 60 or dist < 5 or part.Position.Y < myPos.Y - 10 then return false end
-    
     return true
 end
 
-local function FindNextObjective()
-    AILog("Raciocinando: Escaneando ambiente ao redor...")
+local function GetBestNextStep()
     local char = LocalPlayer.Character
     if not char then return nil end
     local hrp = char.HumanoidRootPart
     
-    local bestTarget = nil
-    local bestScore = -math.huge
+    local best = nil
+    local highscore = -math.huge
     
-    for _, obj in pairs(Workspace:GetDescendants()) do
-        if obj:IsA("BasePart") and EvaluatePart(obj, hrp.Position) then
-            -- Calcula a "pontuação" da plataforma (Prioriza altura e distância moderada)
-            local score = obj.Position.Y - ((obj.Position - hrp.Position).Magnitude * 0.5)
-            if score > bestScore then
-                bestScore = score
-                bestTarget = obj
+    -- Escaneamento em profundidade (LIDAR 3D)
+    local parts = Workspace:FindPartInRegion3(Region3.new(hrp.Position - Vector3.new(40,20,40), hrp.Position + Vector3.new(40,40,40)), char, 100)
+    
+    for _, part in pairs(parts) do
+        if IsSafe(part) then
+            -- Heurística: Prioriza partes que estão mais à frente (Z negativo) e mais altas (Y positivo)
+            local score = (part.Position.Y * 2) - (part.Position - hrp.Position).Magnitude
+            if score > highscore and (part.Position - hrp.Position).Magnitude > 3 then
+                highscore = score
+                best = part
             end
         end
     end
-    
-    if bestTarget then AILog("Raciocinando: Alvo definido -> " .. bestTarget.Name) end
-    return bestTarget
-    end--// LÓGICA DE MOVIMENTAÇÃO E VONTADE PRÓPRIA
-local function ExecuteAI()
-    if not getgenv().ZakyAI.Active then return end
+    return best
+    end--// NÚCLEO DE MOVIMENTAÇÃO AUTÔNOMA
+local function ThinkAndMove()
+    if not getgenv().ZakySingularity.Active then return end
     local char = LocalPlayer.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
-    
-    local hum = char.Humanoid
-    local hrp = char.HumanoidRootPart
-    
-    -- Se não tem alvo, procura um
-    if not getgenv().ZakyAI.Target or (hrp.Position - getgenv().ZakyAI.Target.Position).Magnitude < 4 then
-        getgenv().ZakyAI.Target = FindNextObjective()
-        if not getgenv().ZakyAI.Target then
-            AILog("Aviso: Nenhum caminho seguro encontrado. Aguardando...")
-            hum:MoveTo(hrp.Position)
-            task.wait(1)
-            return
-        end
+    local hum = char:WaitForChild("Humanoid")
+    local hrp = char:WaitForChild("HumanoidRootPart")
+
+    -- Busca novo objetivo se o atual for atingido ou nulo
+    if not getgenv().ZakySingularity.CurrentObjective or (hrp.Position - getgenv().ZakySingularity.CurrentObjective.Position).Magnitude < 4 then
+        NeuralLog("Analisando topografia do terreno...")
+        getgenv().ZakySingularity.CurrentObjective = GetBestNextStep()
     end
 
-    -- Toma a decisão de mover
-    local targetPos = getgenv().ZakyAI.Target.Position + Vector3.new(0, 2, 0)
-    hum:MoveTo(targetPos)
-    
-    -- Sensores Anti-Colisão (LIDAR)
-    local rayF = Workspace:Raycast(hrp.Position, hrp.CFrame.LookVector * 5)
-    local rayD = Workspace:Raycast(hrp.Position + hrp.CFrame.LookVector * 4, Vector3.new(0, -10, 0))
-    
-    if rayF and rayF.Instance then
-        AILog("Ação: Obstáculo detectado! Calculando salto...")
-        hum.Jump = true
-    elseif not rayD then
-        AILog("Ação: Vão livre detectado! Impulsionando para frente.")
-        hum.Jump = true
-        hrp.Velocity = hrp.CFrame.LookVector * 30 + Vector3.new(0, 20, 0)
-        task.wait(0.3) -- Espera o pulo acontecer
+    local target = getgenv().ZakySingularity.CurrentObjective
+    if target then
+        NeuralLog("Objetivo: " .. target.Name .. " | Distância: " .. math.floor((hrp.Position - target.Position).Magnitude))
+        hum:MoveTo(target.Position)
+        
+        -- CÁLCULO DE SALTO COMPLEXO
+        local dist = (Vector2.new(hrp.Position.X, hrp.Position.Z) - Vector2.new(target.Position.X, target.Position.Z)).Magnitude
+        local heightDiff = target.Position.Y - hrp.Position.Y
+        
+        if dist > 6 or heightDiff > 1 then
+            NeuralLog("Detectado GAP. Calculando vetor de impulso...")
+            hum.Jump = true
+            -- Aplica um pequeno "boost" para garantir que alcance a plataforma
+            hrp.Velocity = (target.Position - hrp.Position).Unit * 25 + Vector3.new(0, 35, 0)
+            task.wait(0.3)
+        end
     else
-        getgenv().ZakyAI.State = "MOVENDO"
+        NeuralLog("Ponto cego detectado. Tentando exploração lateral...")
+        hum:MoveTo(hrp.Position + hrp.CFrame.RightVector * 5)
     end
 end
 
--- Ativação via Botão
-ToggleBtn.MouseButton1Click:Connect(function()
-    getgenv().ZakyAI.Active = not getgenv().ZakyAI.Active
-    if getgenv().ZakyAI.Active then
-        ToggleBtn.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
-        ToggleBtn.Text = "DESATIVAR IA"
-        AILog("SISTEMA INICIADO. Assumindo controle do avatar.")
-    else
-        ToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 150)
-        ToggleBtn.Text = "INICIAR CONSCIÊNCIA"
-        AILog("SISTEMA DESLIGADO. Controle retornado ao jogador.")
-        if LocalPlayer.Character then LocalPlayer.Character.Humanoid:MoveTo(LocalPlayer.Character.HumanoidRootPart.Position) end
+-- Monitor de Morte (Aprendizado por Reforço)
+LocalPlayer.CharacterAdded:Connect(function(char)
+    if getgenv().ZakySingularity.Active then
+        local hrp = char:WaitForChild("HumanoidRootPart")
+        table.insert(getgenv().ZakySingularity.Memory, hrp.Position)
+        NeuralLog("Falha registrada. Ponto evitado na próxima iteração.")
+    end
+end)--// INTERFACE FINAL
+local Toggle = Instance.new("TextButton", Main)
+Toggle.Size = UDim2.new(1, -20, 0, 45); Toggle.Position = UDim2.new(0, 10, 1, -55)
+Toggle.BackgroundColor3 = Color3.fromRGB(0, 60, 100); Toggle.Text = "DESPERTAR IA (SINGULARITY)"
+Toggle.TextColor3 = Color3.new(1,1,1); Toggle.Font = Enum.Font.GothamBold; Instance.new("UICorner", Toggle)
+
+Toggle.MouseButton1Click:Connect(function()
+    getgenv().ZakySingularity.Active = not getgenv().ZakySingularity.Active
+    Toggle.Text = getgenv().ZakySingularity.Active and "DESATIVAR CONSCIÊNCIA" or "DESPERTAR IA (SINGULARITY)"
+    Toggle.BackgroundColor3 = getgenv().ZakySingularity.Active and Color3.fromRGB(150, 0, 50) or Color3.fromRGB(0, 60, 100)
+    
+    if getgenv().ZakySingularity.Active then
+        NeuralLog("Consciência desperta. Iniciando análise autônoma.")
     end
 end)
 
--- Loop de Pensamento da IA (Roda 4 vezes por segundo para evitar lag)
+-- Ciclo Neural (Alta frequência para obbys rápidos)
 task.spawn(function()
     while true do
-        task.wait(0.25)
-        if getgenv().ZakyAI.Active then
-            pcall(ExecuteAI)
+        task.wait(0.15)
+        if getgenv().ZakySingularity.Active then
+            pcall(ThinkAndMove)
         end
     end
 end)
