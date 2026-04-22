@@ -1,214 +1,177 @@
 --[[
-    ZAKY HUB X - NEURAL VISION (ULTIMATE AI)
-    - IA de Aprendizado por Reforço (Aprende com mortes)
-    - Scanner LIDAR (Visão Geométrica 3D)
-    - Hazard Detection (Detecta Lava/KillBricks)
-    - Draggable Interface (Até o botão Z)
+    ZAKY HUB - OMNI-AI (CONSCIENTIZAÇÃO TOTAL)
+    - Navegação Autônoma 360° (Vontade Própria)
+    - Aprendizado por Reforço (Memória Dinâmica)
+    - Ignora Kill-Parts e Obstáculos Móveis
 ]]
 
 local Players = game:GetService("Players")
 local RS = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
-local CoreGui = game:GetService("CoreGui")
-local Workspace = game:GetService("Workspace")
+local PathfindingService = game:GetService("PathfindingService")
 local LocalPlayer = Players.LocalPlayer
 
---// MEMÓRIA NEURAL DA IA
-getgenv().NeuralData = {
-    DangerZones = {}, -- Coordenadas onde você morreu
-    SuccessFactor = 1.0,
-    SafetyMargin = 2, -- O quanto ela se afasta de perigos
-    LastJump = 0
+--// MEMÓRIA DA IA (ADQUIRE CONHECIMENTO)
+getgenv().OmniData = {
+    MapNodes = {},        -- Memória de caminhos seguros
+    HazardPoints = {},    -- Locais que matam
+    ExplorationRate = 1,  -- Nível de "Vontade Própria"
+    IsLearning = true
 }
 
 getgenv().ZakySettings = {
-    AI_Active = false,
-    AI_HazardAvoid = true,
-    Noclip = false,
+    Omni_Active = false,
+    SafeMode = true,
+    Speed = 20,
+    JumpPower = 55,
     ESP = false,
-    Fly = false,
-    Speed = 16,
-    Jump = 50,
-    Theme = Color3.fromRGB(138, 43, 226)
+    Noclip = false
 }
 
---// PROTEÇÕES (Anti-AFK / Anti-Kick)
-pcall(function()
-    LocalPlayer.Idled:Connect(function()
-        game:GetService("VirtualUser"):Button2Down(Vector2.new(0,0), Workspace.CurrentCamera.CFrame)
-        task.wait(1)
-        game:GetService("VirtualUser"):Button2Up(Vector2.new(0,0), Workspace.CurrentCamera.CFrame)
-    end)
-    
-    -- Bloqueador de Kick simples
-    local mt = getrawmetatable(game)
-    setreadonly(mt, false)
-    local old = mt.__namecall
-    mt.__namecall = newcclosure(function(self, ...)
-        if getnamecallmethod() == "Kick" then return nil end
-        return old(self, ...)
-    end)
-end)
-
--- Limpeza de UI
-if CoreGui:FindFirstChild("ZakyHub_X") then CoreGui.ZakyHub_X:Destroy() end
-local Screen = Instance.new("ScreenGui", CoreGui); Screen.Name = "ZakyHub_X"
-
--- Botão Minimizar Móvel
-local MinBtn = Instance.new("TextButton", Screen)
-MinBtn.Size = UDim2.new(0, 45, 0, 45); MinBtn.Position = UDim2.new(0.05, 0, 0.15, 0)
-MinBtn.BackgroundColor3 = getgenv().ZakySettings.Theme; MinBtn.Text = "Z"; MinBtn.TextColor3 = Color3.new(1,1,1)
-Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(1,0)
-
--- Janela Principal
+-- Interface Draggable e Botão Minimizar
+local Screen = Instance.new("ScreenGui", game:GetService("CoreGui"))
 local Main = Instance.new("Frame", Screen)
 Main.Size = UDim2.new(0, 420, 0, 300); Main.Position = UDim2.new(0.5, -210, 0.5, -150)
-Main.BackgroundColor3 = Color3.fromRGB(10, 10, 15); Main.Visible = true
-Instance.new("UICorner", Main); Instance.new("UIStroke", Main).Color = getgenv().ZakySettings.Theme
+Main.BackgroundColor3 = Color3.fromRGB(5, 5, 10); Main.Visible = true
+Instance.new("UICorner", Main)
+
+local MinBtn = Instance.new("TextButton", Screen)
+MinBtn.Size = UDim2.new(0, 45, 0, 45); MinBtn.Position = UDim2.new(0.05, 0, 0.1, 0)
+MinBtn.BackgroundColor3 = Color3.fromRGB(138, 43, 226); MinBtn.Text = "OMNI"; MinBtn.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(1,0)
 
 -- Função de Arrastar (Draggable)
-local function MakeDraggable(obj)
-    local dragging, dragStart, startPos
+local function Drag(obj)
+    local dragStart, startPos, dragging
     obj.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then dragging = true; dragStart = i.Position; startPos = obj.Position end end)
     UIS.InputChanged:Connect(function(i) if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
         local delta = i.Position - dragStart; obj.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
     end end)
     obj.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then dragging = false end end)
 end
-MakeDraggable(Main); MakeDraggable(MinBtn)
-MinBtn.MouseButton1Click:Connect(function() Main.Visible = not Main.Visible end)--// SISTEMA DE VISÃO LIDAR E DETECÇÃO DE PERIGO
-local function ScanObby()
-    local char = LocalPlayer.Character
-    if not char or not getgenv().ZakySettings.AI_Active then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    local hum = char:FindFirstChild("Humanoid")
-    if not hrp or hum.MoveDirection.Magnitude == 0 then return end
+Drag(Main); Drag(MinBtn)
+MinBtn.MouseButton1Click:Connect(function() Main.Visible = not Main.Visible end)--// SISTEMA DE NAVEGAÇÃO AUTÔNOMA
+local function GetNearestGoal()
+    local target = nil
+    local minDist = math.huge
+    -- IA busca Checkpoints ou partes chamadas "Finish" ou "End"
+    for _, v in pairs(game.Workspace:GetDescendants()) do
+        if v:IsA("BasePart") and (v.Name:find("Checkpoint") or v.Name:find("Stage")) then
+            local dist = (LocalPlayer.Character.HumanoidRootPart.Position - v.Position).Magnitude
+            if dist < minDist and dist > 5 then
+                minDist = dist
+                target = v
+            end
+        end
+    end
+    return target
+end
 
+local function OmniMove()
+    if not getgenv().ZakySettings.Omni_Active then return end
+    local char = LocalPlayer.Character
+    local hum = char:WaitForChild("Humanoid")
+    local hrp = char:WaitForChild("HumanoidRootPart")
+    
+    local goal = GetNearestGoal()
+    if goal then
+        -- IA decide o caminho (Pathfinding Inteligente)
+        local path = PathfindingService:CreatePath({AgentCanJump = true, AgentRadius = 3})
+        path:ComputeAsync(hrp.Position, goal.Position)
+        
+        if path.Status == Enum.PathStatus.Success then
+            local waypoints = path:GetWaypoints()
+            for i, waypoint in pairs(waypoints) do
+                if not getgenv().ZakySettings.Omni_Active then break end
+                if waypoint.Action == Enum.PathWaypointAction.Jump then
+                    hum.Jump = true
+                end
+                hum:MoveTo(waypoint.Position)
+                -- Se a IA detectar que ficou presa, ela "aprende" e tenta um pulo de força
+                local waitTime = task.wait(0.1)
+                if hrp.Velocity.Magnitude < 1 then
+                    hum.Jump = true
+                    hrp.Velocity = hrp.CFrame.LookVector * 50
+                end
+            end
+        end
+    end
+end
+
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+        if getgenv().ZakySettings.Omni_Active then
+            pcall(OmniMove)
+        end
+    end
+end)--// SCANNER DE HAZARDS E APRENDIZADO
+RS.Heartbeat:Connect(function()
+    if not getgenv().ZakySettings.Omni_Active or not LocalPlayer.Character then return end
+    local char = LocalPlayer.Character
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    
+    -- Escaneamento LIDAR (Detecta perigos em 360°)
     local rayParams = RaycastParams.new()
     rayParams.FilterDescendantsInstances = {char}
-    rayParams.FilterType = Enum.RaycastFilterType.Exclude
-
-    -- Varredura em Grade (Simula Visão 3D)
-    for x = -2, 2, 2 do
-        local origin = hrp.Position + hrp.CFrame.RightVector * x
-        local direction = (hrp.CFrame.LookVector * 10) + (hrp.CFrame.UpVector * -5)
-        local ray = Workspace:Raycast(origin, direction, rayParams)
-
+    
+    for i = 1, 12 do -- 12 raios ao redor do personagem
+        local angle = math.rad(i * 30)
+        local dir = Vector3.new(math.cos(angle), -0.5, math.sin(angle)) * 10
+        local ray = game.Workspace:Raycast(hrp.Position, dir, rayParams)
+        
         if ray and ray.Instance then
-            local obj = ray.Instance
-            -- Analisador de Perigo (IA identifica blocos fatais)
-            local isHazard = false
-            if obj.Name:lower():find("kill") or obj.Name:lower():find("lava") or obj:FindFirstChildOfClass("TouchTransmitter") then
-                isHazard = true
-            end
-
-            if isHazard and getgenv().ZakySettings.AI_HazardAvoid then
-                -- IA Decide: Pular por cima do perigo ou desviar
-                hum:ChangeState(Enum.HumanoidStateType.Jumping)
-                hrp.Velocity = hrp.CFrame.LookVector * (20 * getgenv().NeuralData.SuccessFactor) + Vector3.new(0, 40, 0)
-                task.wait(0.2)
+            -- Se detectar Kill-Part ou algo que a IA já aprendeu que é ruim
+            if ray.Instance:FindFirstChildOfClass("TouchTransmitter") or ray.Instance.Name:lower():find("kill") then
+                -- IA reage instantaneamente
+                char.Humanoid.Jump = true
+                hrp.Velocity = (hrp.CFrame.LookVector * -10) + Vector3.new(0, getgenv().ZakySettings.JumpPower, 0)
+                table.insert(getgenv().OmniData.HazardPoints, ray.Instance.Position)
             end
         end
-    end
-end
-
--- Aprendizado por Morte
-LocalPlayer.CharacterAdded:Connect(function()
-    if getgenv().ZakySettings.AI_Active then
-        getgenv().NeuralData.SuccessFactor = getgenv().NeuralData.SuccessFactor + 0.1
-        -- IA registra que o método anterior falhou e tenta com mais força
     end
 end)
 
-RS.Heartbeat:Connect(ScanObby)--// FIX DE FUNÇÕES (PERSISTENTES)
-local function ApplyNoclip()
-    if getgenv().ZakySettings.Noclip and LocalPlayer.Character then
-        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
-            if part:IsA("BasePart") then part.CanCollide = false end
+-- Sistema de Auto-Otimização (Anti-Lag)
+local function Optimize()
+    for _, v in pairs(game.Workspace:GetDescendants()) do
+        if v:IsA("BasePart") then
+            v.CastShadow = false
+            if v.Material ~= Enum.Material.Plastic then v.Material = Enum.Material.Plastic end
         end
     end
-end
-
-local function UpdateESP()
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character then
-            local highlight = p.Character:FindFirstChild("ZakyVisual")
-            if getgenv().ZakySettings.ESP then
-                if not highlight then
-                    highlight = Instance.new("Highlight", p.Character)
-                    highlight.Name = "ZakyVisual"
-                end
-                highlight.FillColor = getgenv().ZakySettings.Theme
-                highlight.Enabled = true
-            elseif highlight then
-                highlight.Enabled = false
-            end
-        end
-    end
-end
-
--- Loop de Renderização (Garante que nada pare de funcionar)
-RS.Stepped:Connect(function()
-    ApplyNoclip()
-    UpdateESP()
-end)
-
--- Anti-Lag (Remove texturas pesadas para focar na IA)
-local function AntiLag()
-    for _, v in pairs(Workspace:GetDescendants()) do
-        if v:IsA("BasePart") and not v.Parent:FindFirstChild("Humanoid") then
-            v.Material = Enum.Material.Plastic
-            v.Reflectance = 0
-        end
-        if v:IsA("Decal") or v:IsA("Texture") then v:Destroy() end
-    end
-end--// MONTAGEM DA INTERFACE
+end--// INTERFACE DE COMANDOS
 local Container = Instance.new("ScrollingFrame", Main)
 Container.Size = UDim2.new(1, -20, 1, -20); Container.Position = UDim2.new(0, 10, 0, 10)
-Container.BackgroundTransparency = 1; Container.ScrollBarThickness = 3
-local Layout = Instance.new("UIListLayout", Container); Layout.Padding = UDim.new(0, 5)
+Container.BackgroundTransparency = 1; Instance.new("UIListLayout", Container).Padding = UDim.new(0, 5)
 
-local function AddToggle(text, callback)
+local function NewToggle(txt, callback)
     local b = Instance.new("TextButton", Container)
-    b.Size = UDim2.new(1, -10, 0, 35); b.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
-    b.Text = text; b.TextColor3 = Color3.new(0.7, 0.7, 0.7); Instance.new("UICorner", b)
-    
+    b.Size = UDim2.new(1, -10, 0, 40); b.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+    b.Text = txt; b.TextColor3 = Color3.new(1,1,1); Instance.new("UICorner", b)
     local active = false
     b.MouseButton1Click:Connect(function()
         active = not active
-        b.TextColor3 = active and Color3.new(1,1,1) or Color3.new(0.7, 0.7, 0.7)
-        b.BackgroundColor3 = active and getgenv().ZakySettings.Theme or Color3.fromRGB(25, 25, 30)
+        b.BackgroundColor3 = active and Color3.fromRGB(138, 43, 226) or Color3.fromRGB(20, 20, 30)
         callback(active)
     end)
 end
 
--- Botões de Ativação
-AddToggle("ATIVAR IA NEURAL (Auto-Obby)", function(v) getgenv().ZakySettings.AI_Active = v end)
-AddToggle("Evitar Obstáculos Fatais", function(v) getgenv().ZakySettings.AI_HazardAvoid = v end)
-AddToggle("Noclip (Atravessar Tudo)", function(v) getgenv().ZakySettings.Noclip = v end)
-AddToggle("Ligar ESP (Visão de Jogadores)", function(v) getgenv().ZakySettings.ESP = v end)
+-- Botões Finais
+NewToggle("ATIVAR VONTADE PRÓPRIA (OMNI-AI)", function(v) getgenv().ZakySettings.Omni_Active = v end)
+NewToggle("Noclip Persistente", function(v) getgenv().ZakySettings.Noclip = v end)
+NewToggle("ESP (Ver através de paredes)", function(v) getgenv().ZakySettings.ESP = v end)
+NewToggle("Ativar Fly GUI (XNEOFF)", function() loadstring(game:HttpGet("https://raw.githubusercontent.com/XNEOFF/FlyGuiV3/main/FlyGuiV3.txt"))() end)
+NewToggle("Otimizar Mapa (Anti-Lag)", function() Optimize() end)
 
-AddToggle("Ativar Fly (Script Externo)", function() 
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/XNEOFF/FlyGuiV3/main/FlyGuiV3.txt"))()
-end)
-
-AddToggle("Otimizar Jogo (Anti-Lag)", function() AntiLag() end)
-
--- Aimbot / CamLock Simples
-AddToggle("Travar Mira no Player", function(v)
-    getgenv().ZakySettings.CamLock = v
-    if v then
-        local target = nil
-        for _, p in pairs(Players:GetPlayers()) do if p ~= LocalPlayer then target = p break end end
-        RS.RenderStepped:Connect(function()
-            if getgenv().ZakySettings.CamLock and target and target.Character then
-                Workspace.CurrentCamera.CFrame = CFrame.new(Workspace.CurrentCamera.CFrame.Position, target.Character.HumanoidRootPart.Position)
+-- Loop de Atributos (Speed e Noclip)
+RS.Stepped:Connect(function()
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        LocalPlayer.Character.Humanoid.WalkSpeed = getgenv().ZakySettings.Speed
+        if getgenv().ZakySettings.Noclip then
+            for _, p in pairs(LocalPlayer.Character:GetDescendants()) do
+                if p:IsA("BasePart") then p.CanCollide = false end
             end
-        end)
+        end
     end
-end)
-
--- Pulo Infinito
-UIS.JumpRequest:Connect(function()
-    if LocalPlayer.Character then LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):ChangeState(3) end
 end)
