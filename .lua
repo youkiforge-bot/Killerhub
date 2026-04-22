@@ -564,7 +564,7 @@ local function createMainUI()
     addCheckbox(visualScroll, "Tracer", false, function(v) espSettings.tracer = v end)
 
     addSliderOnly(visualScroll, checkY + 0.05, "Distância Max", 100, 1000, 500, function(v) espSettings.maxDistance = v end)
-    visualScroll.CanvasSize = UDim2.new(0, 0, checkY + 0.35, 0)--[[ ZakyHub - Parte 3/4: Abas World e Scripts, lógica de troca de abas, eventos de minimizar/fechar/executar e toggles ]]
+    visualScroll.CanvasSize = UDim2.new(0, 0, checkY + 0.35, 0)--[[ ZakyHub - Parte 3/4 (CORRIGIDA): Abas World e Scripts, troca de abas, eventos e botão minimizar funcionando ]]
 
 -- Continuação da função createMainUI()
 
@@ -709,6 +709,7 @@ local function createMainUI()
             floatButton.TextColor3 = Color3.fromRGB(255, 255, 255)
             floatButton.TextSize = 24
             floatButton.Font = Enum.Font.GothamBold
+            floatButton.ZIndex = 10
             floatButton.Parent = screenGui
             local fCorner = Instance.new("UICorner")
             fCorner.CornerRadius = UDim.new(0, 25)
@@ -718,19 +719,26 @@ local function createMainUI()
             fStroke.Thickness = 1
             fStroke.Parent = floatButton
 
-            -- Arrasto do botão flutuante
+            -- CORREÇÃO: Variáveis para distinguir arrasto de clique
             local fDragging = false
             local fDragStart, fStartPos
+            local hasMoved = false
+
             floatButton.InputBegan:Connect(function(input)
                 if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
                     fDragging = true
+                    hasMoved = false
                     fDragStart = input.Position
                     fStartPos = floatButton.Position
                 end
             end)
+
             UserInputService.InputChanged:Connect(function(input)
                 if fDragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
                     local delta = input.Position - fDragStart
+                    if math.abs(delta.X) > 5 or math.abs(delta.Y) > 5 then
+                        hasMoved = true
+                    end
                     floatButton.Position = UDim2.new(
                         fStartPos.X.Scale,
                         fStartPos.X.Offset + delta.X,
@@ -739,15 +747,16 @@ local function createMainUI()
                     )
                 end
             end)
+
             UserInputService.InputEnded:Connect(function(input)
                 if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
                     fDragging = false
                 end
             end)
 
-            -- Restaurar ao clicar (sem arrastar)
-            floatButton.MouseButton1Click:Connect(function()
-                if not fDragging then
+            -- CORREÇÃO PRINCIPAL: Usar Activated para abrir
+            floatButton.Activated:Connect(function()
+                if not hasMoved then
                     isMinimized = false
                     floatButton:Destroy()
                     floatButton = nil
