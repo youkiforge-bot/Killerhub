@@ -1,4 +1,4 @@
---[[ ZakyHub - Parte 1/3: Estrutura base da interface e abas ]]
+--[[ ZakyHub - Parte 1/3 (CORRIGIDA): Estrutura base, posição central e arrasto da janela ]]
 
 -- ==================== SERVIÇOS ====================
 local Players = game:GetService("Players")
@@ -29,7 +29,7 @@ screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 local mainFrame
 local floatButton
 local isMinimized = false
-local originalPosition = UDim2.new(0.05, 0, 0.1, 0)
+local originalPosition = UDim2.new(0.5, 0, 0.5, 0) -- Centro da tela
 
 -- Configurações do ESP
 local espSettings = {
@@ -45,13 +45,13 @@ local espSettings = {
     tracerColor = Color3.fromRGB(255, 0, 0)
 }
 local espObjects = {}
+local espConnections = {}
 
 -- Variáveis de funções
 local flyEnabled = false
 local flySpeed = 50
 local speedEnabled = false
 local walkSpeed = 16
-local jumpEnabled = false
 local infiniteJump = false
 local autoFarmEnabled = false
 
@@ -103,8 +103,9 @@ end
 local function createMainUI()
     -- Frame principal
     mainFrame = Instance.new("Frame")
-    mainFrame.Size = UDim2.new(0.9, 0, 0.8, 0)
+    mainFrame.Size = UDim2.new(0.9, 0, 0.75, 0) -- Altura reduzida para caber melhor
     mainFrame.Position = originalPosition
+    mainFrame.AnchorPoint = Vector2.new(0.5, 0.5) -- Centraliza
     mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
     mainFrame.BackgroundTransparency = 0.05
     mainFrame.BorderSizePixel = 0
@@ -122,16 +123,12 @@ local function createMainUI()
 
     -- Animação de entrada
     mainFrame.Size = UDim2.new(0, 0, 0, 0)
-    mainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
-    mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
     local tweenIn = TweenService:Create(mainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-        Size = UDim2.new(0.9, 0, 0.8, 0),
-        Position = UDim2.new(0.5, 0, 0.5, 0)
+        Size = UDim2.new(0.9, 0, 0.75, 0)
     })
     tweenIn:Play()
-    mainFrame.AnchorPoint = Vector2.new(0, 0)
 
-    -- Barra superior
+    -- Barra superior (agora arrastável)
     local topBar = Instance.new("Frame")
     topBar.Size = UDim2.new(1, 0, 0.12, 0)
     topBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
@@ -181,7 +178,43 @@ local function createMainUI()
     closeCorner.CornerRadius = UDim.new(0, 6)
     closeCorner.Parent = closeBtn
 
-    -- Abas
+    -- ========== ARRASTO DA JANELA (NÃO MINIMIZADA) ==========
+    local dragging = false
+    local dragStart = nil
+    local startPos = nil
+
+    topBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = mainFrame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
+            local delta = input.Position - dragStart
+            mainFrame.Position = UDim2.new(
+                startPos.X.Scale,
+                startPos.X.Offset + delta.X,
+                startPos.Y.Scale,
+                startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+
+    -- ========== ABAS ==========
     local tabFrame = Instance.new("Frame")
     tabFrame.Size = UDim2.new(1, 0, 0.1, 0)
     tabFrame.Position = UDim2.new(0, 0, 0.12, 0)
@@ -229,10 +262,9 @@ local function createMainUI()
         page.Visible = (name == "Home")
         page.Parent = contentFrame
         pages[name] = page
-    end
-    --[[ ZakyHub - Parte 2/3: Conteúdo das abas, sliders, checkboxes e lógica de eventos ]]
+    end--[[ ZakyHub - Parte 2/3 (CORRIGIDA): Conteúdo das abas com scroll funcional ]]
 
--- Continuação da função createMainUI() (dentro da mesma função)
+-- Continuação da função createMainUI()
 
     -- ========== PREENCHER PÁGINAS ==========
 
@@ -262,8 +294,16 @@ local function createMainUI()
     statusCorner.CornerRadius = UDim.new(0, 6)
     statusCorner.Parent = statusLabel
 
-    -- PLAYER
+    -- PLAYER (agora dentro de um ScrollingFrame para rolar)
     local playerPage = pages["Player"]
+    local playerScroll = Instance.new("ScrollingFrame")
+    playerScroll.Size = UDim2.new(1, 0, 1, 0)
+    playerScroll.BackgroundTransparency = 1
+    playerScroll.BorderSizePixel = 0
+    playerScroll.ScrollBarThickness = 6
+    playerScroll.CanvasSize = UDim2.new(0, 0, 1.2, 0) -- Será ajustado dinamicamente
+    playerScroll.Parent = playerPage
+
     local function addSlider(parent, y, text, min, max, default, callback)
         local label = Instance.new("TextLabel")
         label.Size = UDim2.new(0.9, 0, 0.1, 0)
@@ -327,9 +367,9 @@ local function createMainUI()
         return label, slider
     end
 
-    addSlider(playerPage, 0.05, "WalkSpeed", 16, 200, 16, function(v) walkSpeed = v; if speedEnabled then player.Character.Humanoid.WalkSpeed = v end end)
-    addSlider(playerPage, 0.25, "JumpPower", 50, 300, 50, function(v) if player.Character and player.Character:FindFirstChild("Humanoid") then player.Character.Humanoid.JumpPower = v end end)
-    addSlider(playerPage, 0.45, "Fly Speed", 20, 200, 50, function(v) flySpeed = v end)
+    addSlider(playerScroll, 0.05, "WalkSpeed", 16, 200, 16, function(v) walkSpeed = v; if speedEnabled and player.Character and player.Character:FindFirstChild("Humanoid") then player.Character.Humanoid.WalkSpeed = v end end)
+    addSlider(playerScroll, 0.25, "JumpPower", 50, 300, 50, function(v) if player.Character and player.Character:FindFirstChild("Humanoid") then player.Character.Humanoid.JumpPower = v end end)
+    addSlider(playerScroll, 0.45, "Fly Speed", 20, 200, 50, function(v) flySpeed = v end)
 
     local flyToggle = Instance.new("TextButton")
     flyToggle.Size = UDim2.new(0.9, 0, 0.1, 0)
@@ -339,7 +379,7 @@ local function createMainUI()
     flyToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
     flyToggle.TextSize = 18
     flyToggle.Font = Enum.Font.GothamBold
-    flyToggle.Parent = playerPage
+    flyToggle.Parent = playerScroll
     local flyCorner = Instance.new("UICorner")
     flyCorner.CornerRadius = UDim.new(0, 8)
     flyCorner.Parent = flyToggle
@@ -352,7 +392,7 @@ local function createMainUI()
     speedToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
     speedToggle.TextSize = 18
     speedToggle.Font = Enum.Font.GothamBold
-    speedToggle.Parent = playerPage
+    speedToggle.Parent = playerScroll
     local speedCorner = Instance.new("UICorner")
     speedCorner.CornerRadius = UDim.new(0, 8)
     speedCorner.Parent = speedToggle
@@ -365,13 +405,24 @@ local function createMainUI()
     infJumpToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
     infJumpToggle.TextSize = 18
     infJumpToggle.Font = Enum.Font.GothamBold
-    infJumpToggle.Parent = playerPage
+    infJumpToggle.Parent = playerScroll
     local infCorner = Instance.new("UICorner")
     infCorner.CornerRadius = UDim.new(0, 8)
     infCorner.Parent = infJumpToggle
 
-    -- VISUAL (ESP)
+    -- Ajusta o CanvasSize para o conteúdo da Player
+    playerScroll.CanvasSize = UDim2.new(0, 0, 1.1, 0)
+
+    -- VISUAL (ESP) - também com scroll
     local visualPage = pages["Visual"]
+    local visualScroll = Instance.new("ScrollingFrame")
+    visualScroll.Size = UDim2.new(1, 0, 1, 0)
+    visualScroll.BackgroundTransparency = 1
+    visualScroll.BorderSizePixel = 0
+    visualScroll.ScrollBarThickness = 6
+    visualScroll.CanvasSize = UDim2.new(0, 0, 1.0, 0)
+    visualScroll.Parent = visualPage
+
     local espToggle = Instance.new("TextButton")
     espToggle.Size = UDim2.new(0.9, 0, 0.1, 0)
     espToggle.Position = UDim2.new(0.05, 0, 0.05, 0)
@@ -380,7 +431,7 @@ local function createMainUI()
     espToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
     espToggle.TextSize = 18
     espToggle.Font = Enum.Font.GothamBold
-    espToggle.Parent = visualPage
+    espToggle.Parent = visualScroll
     local espCorner = Instance.new("UICorner")
     espCorner.CornerRadius = UDim.new(0, 8)
     espCorner.Parent = espToggle
@@ -407,14 +458,15 @@ local function createMainUI()
         return box
     end
 
-    addCheckbox(visualPage, "Box", true, function(v) espSettings.box = v end)
-    addCheckbox(visualPage, "Nome", true, function(v) espSettings.name = v end)
-    addCheckbox(visualPage, "Distância", true, function(v) espSettings.distance = v end)
-    addCheckbox(visualPage, "Vida", true, function(v) espSettings.health = v end)
-    addCheckbox(visualPage, "Avatar", true, function(v) espSettings.avatar = v end)
-    addCheckbox(visualPage, "Tracer", false, function(v) espSettings.tracer = v end)
+    addCheckbox(visualScroll, "Box", true, function(v) espSettings.box = v end)
+    addCheckbox(visualScroll, "Nome", true, function(v) espSettings.name = v end)
+    addCheckbox(visualScroll, "Distância", true, function(v) espSettings.distance = v end)
+    addCheckbox(visualScroll, "Vida", true, function(v) espSettings.health = v end)
+    addCheckbox(visualScroll, "Avatar", true, function(v) espSettings.avatar = v end)
+    addCheckbox(visualScroll, "Tracer", false, function(v) espSettings.tracer = v end)
 
-    addSlider(visualPage, checkY + 0.05, "Distância Max", 100, 1000, 500, function(v) espSettings.maxDistance = v end)
+    addSlider(visualScroll, checkY + 0.05, "Distância Max", 100, 1000, 500, function(v) espSettings.maxDistance = v end)
+    visualScroll.CanvasSize = UDim2.new(0, 0, checkY + 0.35, 0)
 
     -- WORLD
     local worldPage = pages["World"]
@@ -434,7 +486,7 @@ local function createMainUI()
     -- SCRIPTS
     local scriptsPage = pages["Scripts"]
     local scriptBox = Instance.new("TextBox")
-    scriptBox.Size = UDim2.new(0.9, 0, 0.5, 0)
+    scriptBox.Size = UDim2.new(0.9, 0, 0.4, 0)
     scriptBox.Position = UDim2.new(0.05, 0, 0.05, 0)
     scriptBox.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
     scriptBox.Text = ""
@@ -454,7 +506,7 @@ local function createMainUI()
 
     local execBtn = Instance.new("TextButton")
     execBtn.Size = UDim2.new(0.4, 0, 0.1, 0)
-    execBtn.Position = UDim2.new(0.05, 0, 0.6, 0)
+    execBtn.Position = UDim2.new(0.05, 0, 0.5, 0)
     execBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 100)
     execBtn.Text = "Executar"
     execBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -467,7 +519,7 @@ local function createMainUI()
 
     local clearBtn = Instance.new("TextButton")
     clearBtn.Size = UDim2.new(0.4, 0, 0.1, 0)
-    clearBtn.Position = UDim2.new(0.55, 0, 0.6, 0)
+    clearBtn.Position = UDim2.new(0.55, 0, 0.5, 0)
     clearBtn.BackgroundColor3 = Color3.fromRGB(200, 100, 50)
     clearBtn.Text = "Limpar"
     clearBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -479,18 +531,18 @@ local function createMainUI()
     clearCorner.Parent = clearBtn
 
     local scriptsList = Instance.new("ScrollingFrame")
-    scriptsList.Size = UDim2.new(0.9, 0, 0.2, 0)
-    scriptsList.Position = UDim2.new(0.05, 0, 0.75, 0)
+    scriptsList.Size = UDim2.new(0.9, 0, 0.35, 0)
+    scriptsList.Position = UDim2.new(0.05, 0, 0.65, 0)
     scriptsList.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
     scriptsList.BorderSizePixel = 0
     scriptsList.ScrollBarThickness = 6
-    scriptsList.CanvasSize = UDim2.new(0, 0, 0, 0)
+    scriptsList.CanvasSize = UDim2.new(0, 0, 0.5, 0)
     scriptsList.Parent = scriptsPage
     local listCorner = Instance.new("UICorner")
     listCorner.CornerRadius = UDim.new(0, 8)
     listCorner.Parent = scriptsList
 
-    -- Adicionar scripts pré-definidos
+    -- Scripts pré-definidos
     local presetScripts = {
         {name = "Killerhub", url = "https://raw.githubusercontent.com/youkiforge-bot/Killerhub/refs/heads/main/.lua"},
         {name = "Fly Gui", code = "loadstring(game:HttpGet('https://pastebin.com/raw/...'))()"}
@@ -498,7 +550,7 @@ local function createMainUI()
     local yPos = 0.05
     for i, scriptData in ipairs(presetScripts) do
         local btn = Instance.new("TextButton")
-        btn.Size = UDim2.new(0.9, 0, 0.1, 0)
+        btn.Size = UDim2.new(0.9, 0, 0.15, 0)
         btn.Position = UDim2.new(0.05, 0, yPos, 0)
         btn.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
         btn.Text = scriptData.name
@@ -517,7 +569,7 @@ local function createMainUI()
             end
             notify("Script", scriptData.name .. " carregado!", 2)
         end)
-        yPos = yPos + 0.12
+        yPos = yPos + 0.18
     end
     scriptsList.CanvasSize = UDim2.new(0, 0, yPos + 0.05, 0)
 
@@ -552,7 +604,7 @@ local function createMainUI()
         if not floatButton then
             floatButton = Instance.new("TextButton")
             floatButton.Size = UDim2.new(0.12, 0, 0.08, 0)
-            floatButton.Position = UDim2.new(0.8, 0, 0.2, 0)
+            floatButton.Position = UDim2.new(0.8, 0, 0.5, 0) -- Meio da direita
             floatButton.BackgroundColor3 = Color3.fromRGB(100, 50, 255)
             floatButton.Text = "Z"
             floatButton.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -568,34 +620,39 @@ local function createMainUI()
             fStroke.Parent = floatButton
 
             -- Arrastar botão flutuante
-            local dragging = false
-            local dragStart, startPos
+            local fDragging = false
+            local fDragStart, fStartPos
             floatButton.InputBegan:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.Touch then
-                    dragging = true
-                    dragStart = input.Position
-                    startPos = floatButton.Position
+                if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    fDragging = true
+                    fDragStart = input.Position
+                    fStartPos = floatButton.Position
                 end
             end)
             UserInputService.InputChanged:Connect(function(input)
-                if dragging and input.UserInputType == Enum.UserInputType.Touch then
-                    local delta = input.Position - dragStart
-                    floatButton.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+                if fDragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
+                    local delta = input.Position - fDragStart
+                    floatButton.Position = UDim2.new(
+                        fStartPos.X.Scale,
+                        fStartPos.X.Offset + delta.X,
+                        fStartPos.Y.Scale,
+                        fStartPos.Y.Offset + delta.Y
+                    )
                 end
             end)
             UserInputService.InputEnded:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.Touch then
-                    dragging = false
+                if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    fDragging = false
                 end
             end)
             floatButton.MouseButton1Click:Connect(function()
-                if not dragging then
+                if not fDragging then
                     isMinimized = false
                     floatButton:Destroy()
                     floatButton = nil
                     mainFrame.Visible = true
                     mainFrame.Position = originalPosition
-                    TweenService:Create(mainFrame, TweenInfo.new(0.2), {Size = UDim2.new(0.9, 0, 0.8, 0)}):Play()
+                    TweenService:Create(mainFrame, TweenInfo.new(0.2), {Size = UDim2.new(0.9, 0, 0.75, 0)}):Play()
                 end
             end)
         end
@@ -668,11 +725,11 @@ local function createMainUI()
             notify("Auto Farm", "Procurando inimigos...", 2)
         end
     end)
-end--[[ ZakyHub - Parte 3/3: Sistema ESP (Drawing), loops de funções e inicialização ]]
+    end--[[ ZakyHub - Parte 3/3: Sistema ESP, loops de funções e inicialização ]]
 
 -- ==================== SISTEMA DE ESP (Drawing Library) ====================
 function startESP()
-    stopESP() -- Limpa qualquer ESP anterior
+    stopESP()
     espConnections = {}
 
     local function createESPForPlayer(plr)
@@ -684,7 +741,6 @@ function startESP()
         local hum = char:FindFirstChild("Humanoid")
         if not root or not hum then return end
 
-        -- Box
         if espSettings.box then
             local box = Drawing.new("Square")
             box.Visible = false
@@ -693,7 +749,6 @@ function startESP()
             box.Filled = false
             drawings.box = box
         end
-        -- Nome
         if espSettings.name then
             local name = Drawing.new("Text")
             name.Visible = false
@@ -703,7 +758,6 @@ function startESP()
             name.Outline = true
             drawings.name = name
         end
-        -- Distância
         if espSettings.distance then
             local dist = Drawing.new("Text")
             dist.Visible = false
@@ -713,7 +767,6 @@ function startESP()
             dist.Outline = true
             drawings.distance = dist
         end
-        -- Barra de vida
         if espSettings.health then
             local healthBar = Drawing.new("Square")
             healthBar.Visible = false
@@ -726,11 +779,6 @@ function startESP()
             healthBg.Filled = true
             drawings.healthBg = healthBg
         end
-        -- Avatar (não implementado diretamente via Drawing, usaremos Text com "👤")
-        if espSettings.avatar then
-            -- Placeholder
-        end
-        -- Tracer
         if espSettings.tracer then
             local tracer = Drawing.new("Line")
             tracer.Visible = false
@@ -837,14 +885,12 @@ createMainUI()
 notify("ZakyHub", "Carregado com sucesso!", 3)
 
 -- ==================== LOOPS DE FUNÇÕES ====================
--- Infinite Jump
 UserInputService.JumpRequest:Connect(function()
     if infiniteJump and player.Character and player.Character:FindFirstChild("Humanoid") then
         player.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
     end
 end)
 
--- Auto Farm simples (exemplo genérico)
 spawn(function()
     while true do
         if autoFarmEnabled and player.Character then
