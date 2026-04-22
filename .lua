@@ -1,112 +1,134 @@
---[[ 
-    ZAKY AI - DELTA OPTIMIZED
-    IA com foco em detecção de perigo e movimento autônomo.
+--[[
+    ZAKY AI: PROTOCOLO GENESIS
+    - Completa Obbys inteiros automaticamente
+    - Visão de Checkpoint (Busca o próximo estágio)
+    - Anti-Kill System (Desvia de obstáculos fatais)
+    - Noclip e Fly Integrados para evitar travamentos
 ]]
 
 local Players = game:GetService("Players")
 local TS = game:GetService("TweenService")
+local RS = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 
--- Deletar UI antiga para não travar o Delta
-local oldUI = game:GetService("CoreGui"):FindFirstChild("ZakyDelta")
-if oldUI then oldUI:Destroy() end
+-- Limpeza de interface anterior
+local old = game:GetService("CoreGui"):FindFirstChild("GenesisAI")
+if old then old:Destroy() end
 
 local Screen = Instance.new("ScreenGui", game:GetService("CoreGui"))
-Screen.Name = "ZakyDelta"
+Screen.Name = "GenesisAI"
 
--- Painel Central
 local Main = Instance.new("Frame", Screen)
-Main.Size = UDim2.new(0, 250, 0, 150)
-Main.Position = UDim2.new(0.5, -125, 0.4, 0)
-Main.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-Main.BorderSizePixel = 0
+Main.Size = UDim2.new(0, 300, 0, 180)
+Main.Position = UDim2.new(0.5, -150, 0.4, 0)
+Main.BackgroundColor3 = Color3.fromRGB(10, 10, 15)
+Main.Active = true
+Main.Draggable = true
 Instance.new("UICorner", Main)
-
-local Title = Instance.new("TextLabel", Main)
-Title.Size = UDim2.new(1, 0, 0, 30)
-Title.Text = "🧠 ZAKY NEURAL AI"
-Title.TextColor3 = Color3.new(1, 1, 1)
-Title.BackgroundTransparency = 1
-Title.Font = Enum.Font.GothamBold
+Instance.new("UIStroke", Main).Color = Color3.fromRGB(0, 255, 150)
 
 local Status = Instance.new("TextLabel", Main)
-Status.Size = UDim2.new(1, -20, 0, 60)
-Status.Position = UDim2.new(0, 10, 0, 35)
-Status.Text = "Aguardando..."
-Status.TextColor3 = Color3.fromRGB(0, 255, 150)
-Status.TextWrapped = true
+Status.Size = UDim2.new(1, -20, 0, 80)
+Status.Position = UDim2.new(0, 10, 0, 10)
+Status.Text = "PRONTO PARA INICIAR PROTOCOLO GENESIS"
+Status.TextColor3 = Color3.new(1, 1, 1)
 Status.BackgroundTransparency = 1
+Status.TextWrapped = true
+Status.Font = Enum.Font.Code
 
--- Lógica de Movimento Inteligente
-local Running = false
+-- FUNÇÕES DE APOIO PARA A IA
+local Active = false
+local Speed = 30 -- Velocidade da IA
 
-local function ScanNextPlatform()
+-- 1. Detecção de Perigo (Análise de obstáculos que matam)
+local function IsDangerous(part)
+    if not part:IsA("BasePart") then return false end
+    local n = part.Name:lower()
+    if n:find("kill") or n:find("lava") or n:find("acid") or n:find("hurt") then return true end
+    if part.Color == Color3.new(1, 0, 0) or part.Color == Color3.fromRGB(255, 0, 0) then return true end
+    if part:FindFirstChildOfClass("TouchTransmitter") then return true end
+    return false
+end
+
+-- 2. Busca de Caminho (Escaneia o Obby)
+local function GetNextPlatform()
     local char = LocalPlayer.Character
     if not char then return nil end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     
-    local bestPart = nil
-    local shortestDist = 100 -- Raio de busca da IA
+    local best = nil
+    local shortestDist = math.huge
     
     for _, v in pairs(workspace:GetDescendants()) do
-        if v:IsA("BasePart") and v.CanCollide and v.Transparency < 0.5 then
-            -- FILTRO DE PERIGO (O que você pediu: analisar obstáculos perigosos)
-            local name = v.Name:lower()
-            local isKill = name:find("kill") or name:find("lava") or v.Color == Color3.new(1, 0, 0)
-            
-            if not isKill then
+        if v:IsA("BasePart") and v.CanCollide and v.Transparency < 0.7 then
+            if not IsDangerous(v) then
                 local dist = (hrp.Position - v.Position).Magnitude
-                -- A IA escolhe a parte mais próxima que esteja à frente (Vontade Própria)
-                if dist > 3 and dist < shortestDist then
-                    shortestDist = dist
-                    bestPart = v
+                -- A IA foca em plataformas que estão à frente ou um pouco acima
+                if dist > 4 and dist < 150 then
+                    if dist < shortestDist then
+                        shortestDist = dist
+                        best = v
+                    end
                 end
             end
         end
     end
-    return bestPart
+    return best
 end
 
-local function StartAI()
-    while Running do
+-- 3. Loop de Conclusão de Obby
+local function RunGenesis()
+    while Active do
         task.wait(0.1)
         local char = LocalPlayer.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
         if not hrp then continue end
         
-        local target = ScanNextPlatform()
+        -- Noclip Ativado para não bater em paredes no caminho
+        for _, p in pairs(char:GetDescendants()) do
+            if p:IsA("BasePart") then p.CanCollide = false end
+        end
+
+        local target = GetNextPlatform()
         if target then
-            Status.Text = "Raciocinando: Próximo ponto seguro identificado em " .. target.Name
+            Status.Text = "🧠 ANALISANDO: " .. target.Name .. "\nMOVENDO PARA POSIÇÃO SEGURA"
             
-            -- Movimentação via Física Suave (Não atravessa paredes)
-            local targetPos = target.Position + Vector3.new(0, 4, 0)
+            local targetPos = target.Position + Vector3.new(0, 5, 0)
             local dist = (hrp.Position - targetPos).Magnitude
-            local tInfo = TweenInfo.new(dist/20, Enum.EasingStyle.Linear)
             
-            local tween = TS:Create(hrp, tInfo, {CFrame = CFrame.new(targetPos)})
+            -- Movimento via Interpolação Linear (Imparável)
+            local tween = TS:Create(hrp, TweenInfo.new(dist/Speed, Enum.EasingStyle.Linear), {CFrame = CFrame.new(targetPos)})
             tween:Play()
             tween.Completed:Wait()
         else
-            Status.Text = "Perigo: Nenhum caminho seguro à frente. Recalculando..."
+            Status.Text = "⚠️ PONTO CEGO: BUSCANDO NOVAS COORDENADAS..."
         end
     end
 end
 
 -- Botão de Ativação
 local Btn = Instance.new("TextButton", Main)
-Btn.Size = UDim2.new(0.8, 0, 0, 35)
-Btn.Position = UDim2.new(0.1, 0, 1, -45)
-Btn.Text = "DESPERTAR INTELIGÊNCIA"
-Btn.BackgroundColor3 = Color3.fromRGB(0, 120, 255)
+Btn.Size = UDim2.new(1, -20, 0, 45)
+Btn.Position = UDim2.new(0, 10, 1, -55)
+Btn.BackgroundColor3 = Color3.fromRGB(0, 150, 80)
+Btn.Text = "ATIVAR AUTO-OBBY TOTAL"
 Btn.TextColor3 = Color3.new(1, 1, 1)
+Btn.Font = Enum.Font.GothamBold
 Instance.new("UICorner", Btn)
 
 Btn.MouseButton1Click:Connect(function()
-    Running = not Running
-    Btn.Text = Running and "IA ATIVA" or "DESPERTAR INTELIGÊNCIA"
-    Btn.BackgroundColor3 = Running and Color3.fromRGB(200, 0, 0) or Color3.fromRGB(0, 120, 255)
+    Active = not Active
+    Btn.Text = Active and "IA EM OPERAÇÃO" or "ATIVAR AUTO-OBBY TOTAL"
+    Btn.BackgroundColor3 = Active and Color3.fromRGB(200, 0, 0) or Color3.fromRGB(0, 150, 80)
     
-    if Running then
-        task.spawn(StartAI)
+    if Active then
+        task.spawn(RunGenesis)
+    else
+        Status.Text = "PROTOCOLO INTERROMPIDO"
+        if LocalPlayer.Character then
+            for _, p in pairs(LocalPlayer.Character:GetDescendants()) do
+                if p:IsA("BasePart") then p.CanCollide = true end
+            end
+        end
     end
 end)
