@@ -1,1029 +1,147 @@
---[[ ZakyHub - Parte 1/4: Serviços, variáveis globais, função de notificação e criação da estrutura principal da interface (até as abas) ]]
+--[[
+    ZAKY HUB : ULTIMATE v5
+    - Tudo em um: Speed, Fly, ESP (Highlight), Target Logic, FPS Boost
+    - Sistema Stealth (Anti-Detecção por Ciclos)
+    - Interface Arrastável e Minimista
+]]
 
--- ==================== SERVIÇOS ====================
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
+local RS = game:GetService("RunService")
+local TS = game:GetService("TweenService")
+local UIS = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
-local Camera = workspace.CurrentCamera
-local VirtualInputManager = game:GetService("VirtualInputManager")
-local HttpService = game:GetService("HttpService")
+local LocalPlayer = Players.LocalPlayer
 
-local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
+-- // Limpeza e Setup
+if CoreGui:FindFirstChild("ZakyFinal") then CoreGui.ZakyFinal:Destroy() end
+local Screen = Instance.new("ScreenGui", CoreGui); Screen.Name = "ZakyFinal"
 
--- ==================== REMOVER INTERFACE ANTIGA ====================
-if playerGui:FindFirstChild("ZakyHub") then
-    playerGui.ZakyHub:Destroy()
-end
-
--- ==================== CRIAÇÃO DA SCREENGUI ====================
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "ZakyHub"
-screenGui.Parent = playerGui
-screenGui.ResetOnSpawn = false
-screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-
--- ==================== VARIÁVEIS GLOBAIS ====================
-local mainFrame
-local floatButton
-local isMinimized = false
-local originalPosition = UDim2.new(0.5, 0, 0.5, 0)
-
--- Configurações do ESP
-local espSettings = {
-    enabled = false,
-    box = true,
-    name = true,
-    distance = true,
-    health = true,
-    avatar = true,
-    tracer = false,
-    maxDistance = 500,
-    boxColor = Color3.fromRGB(255, 255, 255),
-    tracerColor = Color3.fromRGB(255, 0, 0)
+-- // Configurações de Estado
+local State = {
+    Noclip = false,
+    InfJump = false,
+    AutoClick = false,
+    Highlights = false,
+    AntiAFK = true,
+    Speed = 16,
+    Jump = 50
 }
-local espObjects = {}
-local espConnections = {}
 
--- Variáveis de funções
-local flyEnabled = false
-local flySpeed = 50
-local speedEnabled = false
-local walkSpeed = 16
-local infiniteJump = false
-local autoFarmEnabled = false
+-- // UI PRINCIPAL
+local Main = Instance.new("Frame", Screen)
+Main.Size = UDim2.new(0, 380, 0, 420)
+Main.Position = UDim2.new(0.5, -190, 0.3, 0)
+Main.BackgroundColor3 = Color3.fromRGB(12, 12, 14)
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 10)
+local Stroke = Instance.new("UIStroke", Main); Stroke.Color = Color3.fromRGB(255, 0, 60); Stroke.Thickness = 1.5
 
--- ==================== FUNÇÃO DE NOTIFICAÇÃO ====================
-local function notify(title, text, duration)
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0.8, 0, 0.12, 0)
-    frame.Position = UDim2.new(0.1, 0, 0.8, 0)
-    frame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-    frame.BackgroundTransparency = 0.1
-    frame.BorderSizePixel = 0
-    frame.Parent = screenGui
+-- // HEADER (Arrastar)
+local Header = Instance.new("Frame", Main)
+Header.Size = UDim2.new(1, 0, 0, 40); Header.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
+Instance.new("UICorner", Header)
 
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 8)
-    corner.Parent = frame
+local Title = Instance.new("TextLabel", Header)
+Title.Size = UDim2.new(1, 0, 1, 0); Title.Text = "  ZAKYHUB ULTIMATE V5"; Title.TextColor3 = Color3.new(1,1,1)
+Title.Font = Enum.Font.GothamBold; Title.TextSize = 14; Title.TextXAlignment = Enum.TextXAlignment.Left
 
-    local stroke = Instance.new("UIStroke")
-    stroke.Color = Color3.fromRGB(100, 50, 255)
-    stroke.Thickness = 1.5
-    stroke.Parent = frame
+-- // CONSOLE DE STATUS
+local Status = Instance.new("TextLabel", Main)
+Status.Size = UDim2.new(1, -20, 0, 25); Status.Position = UDim2.new(0, 10, 0, 50)
+Status.BackgroundColor3 = Color3.new(0,0,0); Status.Text = " STATUS: SISTEMA ONLINE"; Status.TextColor3 = Color3.new(0,1,0)
+Status.Font = Enum.Font.Code; Status.TextSize = 12; Instance.new("UICorner", Status)
 
-    local titleLabel = Instance.new("TextLabel")
-    titleLabel.Size = UDim2.new(1, 0, 0.3, 0)
-    titleLabel.BackgroundTransparency = 1
-    titleLabel.Text = title
-    titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    titleLabel.TextSize = 18
-    titleLabel.Font = Enum.Font.GothamBold
-    titleLabel.Parent = frame
+-- // CONTAINER DE FUNÇÕES
+local Scroll = Instance.new("ScrollingFrame", Main)
+Scroll.Size = UDim2.new(1, -20, 1, -100); Scroll.Position = UDim2.new(0, 10, 0, 85)
+Scroll.BackgroundTransparency = 1; Scroll.ScrollBarThickness = 2
+local Layout = Instance.new("UIListLayout", Scroll); Layout.Padding = UDim.new(0, 8)
 
-    local textLabel = Instance.new("TextLabel")
-    textLabel.Size = UDim2.new(1, 0, 0.5, 0)
-    textLabel.Position = UDim2.new(0, 0, 0.35, 0)
-    textLabel.BackgroundTransparency = 1
-    textLabel.Text = text
-    textLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-    textLabel.TextSize = 14
-    textLabel.Font = Enum.Font.Gotham
-    textLabel.Parent = frame
-
-    if duration then
-        task.wait(duration)
-        frame:Destroy()
-    end
+-- // FUNÇÕES AUXILIARES
+local function AddToggle(name, callback)
+    local btn = Instance.new("TextButton", Scroll)
+    btn.Size = UDim2.new(1, 0, 0, 35); btn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+    btn.Text = name; btn.TextColor3 = Color3.new(1,1,1); btn.Font = Enum.Font.Gotham
+    Instance.new("UICorner", btn)
+    local active = false
+    btn.MouseButton1Click:Connect(function()
+        active = not active
+        btn.BackgroundColor3 = active and Color3.fromRGB(200, 0, 50) or Color3.fromRGB(30, 30, 35)
+        callback(active)
+    end)
 end
 
--- ==================== FUNÇÃO PARA CRIAR A INTERFACE PRINCIPAL ====================
-local function createMainUI()
-    -- Frame principal
-    mainFrame = Instance.new("Frame")
-    mainFrame.Size = UDim2.new(0.9, 0, 0.75, 0)
-    mainFrame.Position = originalPosition
-    mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-    mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-    mainFrame.BackgroundTransparency = 0.05
-    mainFrame.BorderSizePixel = 0
-    mainFrame.Visible = true
-    mainFrame.Parent = screenGui
+-- // MÓDULOS ATIVOS (O CORAÇÃO DO HUB)
 
-    local mainCorner = Instance.new("UICorner")
-    mainCorner.CornerRadius = UDim.new(0, 12)
-    mainCorner.Parent = mainFrame
-
-    local mainStroke = Instance.new("UIStroke")
-    mainStroke.Color = Color3.fromRGB(100, 50, 255)
-    mainStroke.Thickness = 2
-    mainStroke.Parent = mainFrame
-
-    -- Animação de entrada
-    mainFrame.Size = UDim2.new(0, 0, 0, 0)
-    local tweenIn = TweenService:Create(mainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-        Size = UDim2.new(0.9, 0, 0.75, 0)
-    })
-    tweenIn:Play()
-
-    -- Barra superior (arrastável)
-    local topBar = Instance.new("Frame")
-    topBar.Size = UDim2.new(1, 0, 0.12, 0)
-    topBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-    topBar.BorderSizePixel = 0
-    topBar.Parent = mainFrame
-
-    local topCorner = Instance.new("UICorner")
-    topCorner.CornerRadius = UDim.new(0, 12)
-    topCorner.Parent = topBar
-
-    local titleLabel = Instance.new("TextLabel")
-    titleLabel.Size = UDim2.new(0.6, 0, 1, 0)
-    titleLabel.Position = UDim2.new(0.05, 0, 0, 0)
-    titleLabel.BackgroundTransparency = 1
-    titleLabel.Text = "ZakyHub"
-    titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    titleLabel.TextSize = 24
-    titleLabel.Font = Enum.Font.GothamBold
-    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-    titleLabel.Parent = topBar
-
-    -- Botão minimizar
-    local minimizeBtn = Instance.new("TextButton")
-    minimizeBtn.Size = UDim2.new(0.15, 0, 0.7, 0)
-    minimizeBtn.Position = UDim2.new(0.65, 0, 0.15, 0)
-    minimizeBtn.BackgroundColor3 = Color3.fromRGB(100, 50, 255)
-    minimizeBtn.Text = "–"
-    minimizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    minimizeBtn.TextSize = 24
-    minimizeBtn.Font = Enum.Font.GothamBold
-    minimizeBtn.Parent = topBar
-    local minCorner = Instance.new("UICorner")
-    minCorner.CornerRadius = UDim.new(0, 6)
-    minCorner.Parent = minimizeBtn
-
-    -- Botão fechar
-    local closeBtn = Instance.new("TextButton")
-    closeBtn.Size = UDim2.new(0.15, 0, 0.7, 0)
-    closeBtn.Position = UDim2.new(0.82, 0, 0.15, 0)
-    closeBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-    closeBtn.Text = "✕"
-    closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    closeBtn.TextSize = 20
-    closeBtn.Font = Enum.Font.GothamBold
-    closeBtn.Parent = topBar
-    local closeCorner = Instance.new("UICorner")
-    closeCorner.CornerRadius = UDim.new(0, 6)
-    closeCorner.Parent = closeBtn
-
-    -- ========== ARRASTO DA JANELA (NÃO MINIMIZADA) ==========
-    local dragging = false
-    local dragStart = nil
-    local startPos = nil
-
-    topBar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            dragStart = input.Position
-            startPos = mainFrame.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
-        end
-    end)
-
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
-            local delta = input.Position - dragStart
-            mainFrame.Position = UDim2.new(
-                startPos.X.Scale,
-                startPos.X.Offset + delta.X,
-                startPos.Y.Scale,
-                startPos.Y.Offset + delta.Y
-            )
-        end
-    end)
-
-    UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
-        end
-    end)
-
-    -- ========== ABAS ==========
-    local tabFrame = Instance.new("Frame")
-    tabFrame.Size = UDim2.new(1, 0, 0.1, 0)
-    tabFrame.Position = UDim2.new(0, 0, 0.12, 0)
-    tabFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-    tabFrame.BorderSizePixel = 0
-    tabFrame.Parent = mainFrame
-
-    local tabs = {"Home", "Player", "Visual", "World", "Scripts"}
-    local tabButtons = {}
-    local indicator = Instance.new("Frame")
-    indicator.Size = UDim2.new(0.2, 0, 0.04, 0)
-    indicator.Position = UDim2.new(0, 0, 0.96, 0)
-    indicator.BackgroundColor3 = Color3.fromRGB(100, 50, 255)
-    indicator.BorderSizePixel = 0
-    indicator.Parent = tabFrame
-    local indCorner = Instance.new("UICorner")
-    indCorner.CornerRadius = UDim.new(0, 4)
-    indCorner.Parent = indicator
-
-    for i, name in ipairs(tabs) do
-        local btn = Instance.new("TextButton")
-        btn.Size = UDim2.new(0.2, 0, 1, 0)
-        btn.Position = UDim2.new((i-1)*0.2, 0, 0, 0)
-        btn.BackgroundTransparency = 1
-        btn.Text = name
-        btn.TextColor3 = i == 1 and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(180, 180, 180)
-        btn.TextSize = 16
-        btn.Font = i == 1 and Enum.Font.GothamBold or Enum.Font.Gotham
-        btn.Parent = tabFrame
-        tabButtons[name] = btn
-    end
-
-    -- Conteúdo das abas
-    local contentFrame = Instance.new("Frame")
-    contentFrame.Size = UDim2.new(1, 0, 0.78, 0)
-    contentFrame.Position = UDim2.new(0, 0, 0.22, 0)
-    contentFrame.BackgroundTransparency = 1
-    contentFrame.Parent = mainFrame
-
-    local pages = {}
-    for _, name in ipairs(tabs) do
-        local page = Instance.new("Frame")
-        page.Size = UDim2.new(1, 0, 1, 0)
-        page.BackgroundTransparency = 1
-        page.Visible = (name == "Home")
-        page.Parent = contentFrame
-        pages[name] = page
-    end--[[ ZakyHub - Parte 2/4: Preenchimento das abas Home, Player (sliders + entrada manual) e Visual (checkboxes ESP) ]]
-
--- Continuação direta da função createMainUI() (mantenha a indentação como se estivesse dentro dela)
-
-    -- ========== PREENCHER PÁGINAS ==========
-
-    -- HOME
-    local homePage = pages["Home"]
-    local welcome = Instance.new("TextLabel")
-    welcome.Size = UDim2.new(0.9, 0, 0.15, 0)
-    welcome.Position = UDim2.new(0.05, 0, 0.05, 0)
-    welcome.BackgroundTransparency = 1
-    welcome.Text = "Bem-vindo ao ZakyHub!"
-    welcome.TextColor3 = Color3.fromRGB(255, 255, 255)
-    welcome.TextSize = 22
-    welcome.Font = Enum.Font.GothamBold
-    welcome.TextXAlignment = Enum.TextXAlignment.Left
-    welcome.Parent = homePage
-
-    local statusLabel = Instance.new("TextLabel")
-    statusLabel.Size = UDim2.new(0.9, 0, 0.1, 0)
-    statusLabel.Position = UDim2.new(0.05, 0, 0.7, 0)
-    statusLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-    statusLabel.Text = "Status: Pronto"
-    statusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-    statusLabel.TextSize = 16
-    statusLabel.Font = Enum.Font.Gotham
-    statusLabel.Parent = homePage
-    local statusCorner = Instance.new("UICorner")
-    statusCorner.CornerRadius = UDim.new(0, 6)
-    statusCorner.Parent = statusLabel
-
-    -- PLAYER (com scroll e entrada manual)
-    local playerPage = pages["Player"]
-    local playerScroll = Instance.new("ScrollingFrame")
-    playerScroll.Size = UDim2.new(1, 0, 1, 0)
-    playerScroll.BackgroundTransparency = 1
-    playerScroll.BorderSizePixel = 0
-    playerScroll.ScrollBarThickness = 6
-    playerScroll.CanvasSize = UDim2.new(0, 0, 1.2, 0)
-    playerScroll.Parent = playerPage
-
-    -- Função para slider com entrada numérica
-    local function addSliderWithInput(parent, y, text, min, max, default, callback)
-        local label = Instance.new("TextLabel")
-        label.Size = UDim2.new(0.6, 0, 0.1, 0)
-        label.Position = UDim2.new(0.05, 0, y, 0)
-        label.BackgroundTransparency = 1
-        label.Text = text .. ": " .. default
-        label.TextColor3 = Color3.fromRGB(255, 255, 255)
-        label.TextSize = 16
-        label.Font = Enum.Font.Gotham
-        label.TextXAlignment = Enum.TextXAlignment.Left
-        label.Parent = parent
-
-        local inputBox = Instance.new("TextBox")
-        inputBox.Size = UDim2.new(0.25, 0, 0.08, 0)
-        inputBox.Position = UDim2.new(0.7, 0, y, 0)
-        inputBox.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-        inputBox.Text = tostring(default)
-        inputBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-        inputBox.TextSize = 14
-        inputBox.Font = Enum.Font.Gotham
-        inputBox.PlaceholderText = "Valor"
-        inputBox.PlaceholderColor3 = Color3.fromRGB(150, 150, 150)
-        inputBox.Parent = parent
-        local inputCorner = Instance.new("UICorner")
-        inputCorner.CornerRadius = UDim.new(0, 4)
-        inputCorner.Parent = inputBox
-
-        local slider = Instance.new("Frame")
-        slider.Size = UDim2.new(0.9, 0, 0.05, 0)
-        slider.Position = UDim2.new(0.05, 0, y + 0.12, 0)
-        slider.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-        slider.Parent = parent
-        local sliderCorner = Instance.new("UICorner")
-        sliderCorner.CornerRadius = UDim.new(0, 4)
-        sliderCorner.Parent = slider
-
-        local fill = Instance.new("Frame")
-        fill.Size = UDim2.new((default - min)/(max - min), 0, 1, 0)
-        fill.BackgroundColor3 = Color3.fromRGB(100, 50, 255)
-        fill.BorderSizePixel = 0
-        fill.Parent = slider
-        local fillCorner = Instance.new("UICorner")
-        fillCorner.CornerRadius = UDim.new(0, 4)
-        fillCorner.Parent = fill
-
-        local knob = Instance.new("TextButton")
-        knob.Size = UDim2.new(0.06, 0, 1.5, 0)
-        knob.Position = UDim2.new((default - min)/(max - min) - 0.03, 0, -0.25, 0)
-        knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-        knob.Text = ""
-        knob.Parent = slider
-        local knobCorner = Instance.new("UICorner")
-        knobCorner.CornerRadius = UDim.new(0, 10)
-        knobCorner.Parent = knob
-
-        local currentValue = default
-
-        local function updateUI(value)
-            value = math.clamp(tonumber(value) or min, min, max)
-            currentValue = value
-            label.Text = text .. ": " .. math.floor(value)
-            inputBox.Text = tostring(math.floor(value))
-            local percent = (value - min) / (max - min)
-            fill.Size = UDim2.new(percent, 0, 1, 0)
-            knob.Position = UDim2.new(percent - 0.03, 0, -0.25, 0)
-            callback(value)
-        end
-
-        local draggingSlider = false
-        knob.MouseButton1Down:Connect(function()
-            draggingSlider = true
-        end)
-        UserInputService.InputEnded:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                draggingSlider = false
-            end
-        end)
-        UserInputService.InputChanged:Connect(function(input)
-            if draggingSlider and input.UserInputType == Enum.UserInputType.MouseMovement then
-                local pos = input.Position.X - slider.AbsolutePosition.X
-                local percent = math.clamp(pos / slider.AbsoluteSize.X, 0, 1)
-                local value = min + percent * (max - min)
-                updateUI(value)
-            end
-        end)
-
-        inputBox.FocusLost:Connect(function(enterPressed)
-            local newValue = tonumber(inputBox.Text)
-            if newValue then
-                updateUI(newValue)
-            else
-                inputBox.Text = tostring(currentValue)
-            end
-        end)
-
-        return label, slider, inputBox
-    end
-
-    -- Função para slider simples (sem entrada)
-    local function addSliderOnly(parent, y, text, min, max, default, callback)
-        local label = Instance.new("TextLabel")
-        label.Size = UDim2.new(0.9, 0, 0.1, 0)
-        label.Position = UDim2.new(0.05, 0, y, 0)
-        label.BackgroundTransparency = 1
-        label.Text = text .. ": " .. default
-        label.TextColor3 = Color3.fromRGB(255, 255, 255)
-        label.TextSize = 16
-        label.Font = Enum.Font.Gotham
-        label.TextXAlignment = Enum.TextXAlignment.Left
-        label.Parent = parent
-
-        local slider = Instance.new("Frame")
-        slider.Size = UDim2.new(0.9, 0, 0.05, 0)
-        slider.Position = UDim2.new(0.05, 0, y + 0.12, 0)
-        slider.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-        slider.Parent = parent
-        local sliderCorner = Instance.new("UICorner")
-        sliderCorner.CornerRadius = UDim.new(0, 4)
-        sliderCorner.Parent = slider
-
-        local fill = Instance.new("Frame")
-        fill.Size = UDim2.new((default - min)/(max - min), 0, 1, 0)
-        fill.BackgroundColor3 = Color3.fromRGB(100, 50, 255)
-        fill.BorderSizePixel = 0
-        fill.Parent = slider
-        local fillCorner = Instance.new("UICorner")
-        fillCorner.CornerRadius = UDim.new(0, 4)
-        fillCorner.Parent = fill
-
-        local knob = Instance.new("TextButton")
-        knob.Size = UDim2.new(0.06, 0, 1.5, 0)
-        knob.Position = UDim2.new((default - min)/(max - min) - 0.03, 0, -0.25, 0)
-        knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-        knob.Text = ""
-        knob.Parent = slider
-        local knobCorner = Instance.new("UICorner")
-        knobCorner.CornerRadius = UDim.new(0, 10)
-        knobCorner.Parent = knob
-
-        local dragging = false
-        knob.MouseButton1Down:Connect(function()
-            dragging = true
-        end)
-        UserInputService.InputEnded:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                dragging = false
-            end
-        end)
-        UserInputService.InputChanged:Connect(function(input)
-            if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-                local pos = input.Position.X - slider.AbsolutePosition.X
-                local percent = math.clamp(pos / slider.AbsoluteSize.X, 0, 1)
-                local value = min + percent * (max - min)
-                label.Text = text .. ": " .. math.floor(value)
-                fill.Size = UDim2.new(percent, 0, 1, 0)
-                knob.Position = UDim2.new(percent - 0.03, 0, -0.25, 0)
-                callback(value)
-            end
-        end)
-    end
-
-    addSliderWithInput(playerScroll, 0.05, "WalkSpeed", 16, 200, 16, function(v) walkSpeed = v; if speedEnabled and player.Character and player.Character:FindFirstChild("Humanoid") then player.Character.Humanoid.WalkSpeed = v end end)
-    addSliderWithInput(playerScroll, 0.25, "JumpPower", 50, 300, 50, function(v) if player.Character and player.Character:FindFirstChild("Humanoid") then player.Character.Humanoid.JumpPower = v end end)
-    addSliderOnly(playerScroll, 0.45, "Fly Speed", 20, 200, 50, function(v) flySpeed = v end)
-
-    local flyToggle = Instance.new("TextButton")
-    flyToggle.Size = UDim2.new(0.9, 0, 0.1, 0)
-    flyToggle.Position = UDim2.new(0.05, 0, 0.65, 0)
-    flyToggle.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-    flyToggle.Text = "Fly: OFF"
-    flyToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-    flyToggle.TextSize = 18
-    flyToggle.Font = Enum.Font.GothamBold
-    flyToggle.Parent = playerScroll
-    local flyCorner = Instance.new("UICorner")
-    flyCorner.CornerRadius = UDim.new(0, 8)
-    flyCorner.Parent = flyToggle
-
-    local speedToggle = Instance.new("TextButton")
-    speedToggle.Size = UDim2.new(0.9, 0, 0.1, 0)
-    speedToggle.Position = UDim2.new(0.05, 0, 0.78, 0)
-    speedToggle.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-    speedToggle.Text = "Speed: OFF"
-    speedToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-    speedToggle.TextSize = 18
-    speedToggle.Font = Enum.Font.GothamBold
-    speedToggle.Parent = playerScroll
-    local speedCorner = Instance.new("UICorner")
-    speedCorner.CornerRadius = UDim.new(0, 8)
-    speedCorner.Parent = speedToggle
-
-    local infJumpToggle = Instance.new("TextButton")
-    infJumpToggle.Size = UDim2.new(0.9, 0, 0.1, 0)
-    infJumpToggle.Position = UDim2.new(0.05, 0, 0.91, 0)
-    infJumpToggle.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-    infJumpToggle.Text = "Infinite Jump: OFF"
-    infJumpToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-    infJumpToggle.TextSize = 18
-    infJumpToggle.Font = Enum.Font.GothamBold
-    infJumpToggle.Parent = playerScroll
-    local infCorner = Instance.new("UICorner")
-    infCorner.CornerRadius = UDim.new(0, 8)
-    infCorner.Parent = infJumpToggle
-
-    playerScroll.CanvasSize = UDim2.new(0, 0, 1.1, 0)
-
-    -- VISUAL (ESP)
-    local visualPage = pages["Visual"]
-    local visualScroll = Instance.new("ScrollingFrame")
-    visualScroll.Size = UDim2.new(1, 0, 1, 0)
-    visualScroll.BackgroundTransparency = 1
-    visualScroll.BorderSizePixel = 0
-    visualScroll.ScrollBarThickness = 6
-    visualScroll.CanvasSize = UDim2.new(0, 0, 1.0, 0)
-    visualScroll.Parent = visualPage
-
-    local espToggle = Instance.new("TextButton")
-    espToggle.Size = UDim2.new(0.9, 0, 0.1, 0)
-    espToggle.Position = UDim2.new(0.05, 0, 0.05, 0)
-    espToggle.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-    espToggle.Text = "ESP Master: OFF"
-    espToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-    espToggle.TextSize = 18
-    espToggle.Font = Enum.Font.GothamBold
-    espToggle.Parent = visualScroll
-    local espCorner = Instance.new("UICorner")
-    espCorner.CornerRadius = UDim.new(0, 8)
-    espCorner.Parent = espToggle
-
-    local checkY = 0.2
-    local function addCheckbox(parent, text, default, callback)
-        local box = Instance.new("TextButton")
-        box.Size = UDim2.new(0.9, 0, 0.08, 0)
-        box.Position = UDim2.new(0.05, 0, checkY, 0)
-        box.BackgroundTransparency = 1
-        box.Text = (default and "✅ " or "⬜ ") .. text
-        box.TextColor3 = Color3.fromRGB(255, 255, 255)
-        box.TextSize = 16
-        box.Font = Enum.Font.Gotham
-        box.TextXAlignment = Enum.TextXAlignment.Left
-        box.Parent = parent
-        local state = default
-        box.MouseButton1Click:Connect(function()
-            state = not state
-            box.Text = (state and "✅ " or "⬜ ") .. text
-            callback(state)
-        end)
-        checkY = checkY + 0.1
-        return box
-    end
-
-    addCheckbox(visualScroll, "Box", true, function(v) espSettings.box = v end)
-    addCheckbox(visualScroll, "Nome", true, function(v) espSettings.name = v end)
-    addCheckbox(visualScroll, "Distância", true, function(v) espSettings.distance = v end)
-    addCheckbox(visualScroll, "Vida", true, function(v) espSettings.health = v end)
-    addCheckbox(visualScroll, "Avatar", true, function(v) espSettings.avatar = v end)
-    addCheckbox(visualScroll, "Tracer", false, function(v) espSettings.tracer = v end)
-
-    addSliderOnly(visualScroll, checkY + 0.05, "Distância Max", 100, 1000, 500, function(v) espSettings.maxDistance = v end)
-    visualScroll.CanvasSize = UDim2.new(0, 0, checkY + 0.35, 0)--[[ ZakyHub - Parte 3/4 (CORRIGIDA): Abas World e Scripts, troca de abas, eventos e botão minimizar funcionando ]]
-
--- Continuação da função createMainUI()
-
-    -- WORLD
-    local worldPage = pages["World"]
-    local autoFarmToggle = Instance.new("TextButton")
-    autoFarmToggle.Size = UDim2.new(0.9, 0, 0.1, 0)
-    autoFarmToggle.Position = UDim2.new(0.05, 0, 0.05, 0)
-    autoFarmToggle.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-    autoFarmToggle.Text = "Auto Farm: OFF"
-    autoFarmToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-    autoFarmToggle.TextSize = 18
-    autoFarmToggle.Font = Enum.Font.GothamBold
-    autoFarmToggle.Parent = worldPage
-    local afCorner = Instance.new("UICorner")
-    afCorner.CornerRadius = UDim.new(0, 8)
-    afCorner.Parent = autoFarmToggle
-
-    -- SCRIPTS
-    local scriptsPage = pages["Scripts"]
-    local scriptBox = Instance.new("TextBox")
-    scriptBox.Size = UDim2.new(0.9, 0, 0.4, 0)
-    scriptBox.Position = UDim2.new(0.05, 0, 0.05, 0)
-    scriptBox.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-    scriptBox.Text = ""
-    scriptBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-    scriptBox.TextSize = 14
-    scriptBox.Font = Enum.Font.Code
-    scriptBox.MultiLine = true
-    scriptBox.TextWrapped = true
-    scriptBox.TextXAlignment = Enum.TextXAlignment.Left
-    scriptBox.TextYAlignment = Enum.TextYAlignment.Top
-    scriptBox.PlaceholderText = "Cole seu script aqui..."
-    scriptBox.PlaceholderColor3 = Color3.fromRGB(150, 150, 150)
-    scriptBox.Parent = scriptsPage
-    local sbCorner = Instance.new("UICorner")
-    sbCorner.CornerRadius = UDim.new(0, 8)
-    sbCorner.Parent = scriptBox
-
-    local execBtn = Instance.new("TextButton")
-    execBtn.Size = UDim2.new(0.4, 0, 0.1, 0)
-    execBtn.Position = UDim2.new(0.05, 0, 0.5, 0)
-    execBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 100)
-    execBtn.Text = "Executar"
-    execBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    execBtn.TextSize = 18
-    execBtn.Font = Enum.Font.GothamBold
-    execBtn.Parent = scriptsPage
-    local execCorner = Instance.new("UICorner")
-    execCorner.CornerRadius = UDim.new(0, 8)
-    execCorner.Parent = execBtn
-
-    local clearBtn = Instance.new("TextButton")
-    clearBtn.Size = UDim2.new(0.4, 0, 0.1, 0)
-    clearBtn.Position = UDim2.new(0.55, 0, 0.5, 0)
-    clearBtn.BackgroundColor3 = Color3.fromRGB(200, 100, 50)
-    clearBtn.Text = "Limpar"
-    clearBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    clearBtn.TextSize = 18
-    clearBtn.Font = Enum.Font.GothamBold
-    clearBtn.Parent = scriptsPage
-    local clearCorner = Instance.new("UICorner")
-    clearCorner.CornerRadius = UDim.new(0, 8)
-    clearCorner.Parent = clearBtn
-
-    local scriptsList = Instance.new("ScrollingFrame")
-    scriptsList.Size = UDim2.new(0.9, 0, 0.35, 0)
-    scriptsList.Position = UDim2.new(0.05, 0, 0.65, 0)
-    scriptsList.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-    scriptsList.BorderSizePixel = 0
-    scriptsList.ScrollBarThickness = 6
-    scriptsList.CanvasSize = UDim2.new(0, 0, 0.5, 0)
-    scriptsList.Parent = scriptsPage
-    local listCorner = Instance.new("UICorner")
-    listCorner.CornerRadius = UDim.new(0, 8)
-    listCorner.Parent = scriptsList
-
-    local presetScripts = {
-        {name = "Killerhub", url = "https://raw.githubusercontent.com/youkiforge-bot/Killerhub/refs/heads/main/.lua"},
-        {name = "Fly Gui", code = "loadstring(game:HttpGet('https://pastebin.com/raw/...'))()"}
-    }
-    local yPos = 0.05
-    for i, scriptData in ipairs(presetScripts) do
-        local btn = Instance.new("TextButton")
-        btn.Size = UDim2.new(0.9, 0, 0.15, 0)
-        btn.Position = UDim2.new(0.05, 0, yPos, 0)
-        btn.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-        btn.Text = scriptData.name
-        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        btn.TextSize = 14
-        btn.Font = Enum.Font.Gotham
-        btn.Parent = scriptsList
-        local btnCorner = Instance.new("UICorner")
-        btnCorner.CornerRadius = UDim.new(0, 6)
-        btnCorner.Parent = btn
-        btn.MouseButton1Click:Connect(function()
-            if scriptData.url then
-                scriptBox.Text = 'loadstring(game:HttpGet("' .. scriptData.url .. '"))()'
-            else
-                scriptBox.Text = scriptData.code
-            end
-            notify("Script", scriptData.name .. " carregado!", 2)
-        end)
-        yPos = yPos + 0.18
-    end
-    scriptsList.CanvasSize = UDim2.new(0, 0, yPos + 0.05, 0)
-
-    -- ========== LÓGICA DE ABAS ==========
-    local function switchTab(tabName)
-        for name, page in pairs(pages) do
-            page.Visible = (name == tabName)
-        end
-        for name, btn in pairs(tabButtons) do
-            if name == tabName then
-                btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-                btn.Font = Enum.Font.GothamBold
-                local idx = table.find(tabs, name)
-                TweenService:Create(indicator, TweenInfo.new(0.2), {Position = UDim2.new((idx-1)*0.2, 0, 0.96, 0)}):Play()
-            else
-                btn.TextColor3 = Color3.fromRGB(180, 180, 180)
-                btn.Font = Enum.Font.Gotham
+-- 1. Movimentação Stealth
+RS.Heartbeat:Connect(function()
+    local char = LocalPlayer.Character
+    if char and char:FindFirstChild("Humanoid") then
+        char.Humanoid.WalkSpeed = State.Speed
+        char.Humanoid.JumpPower = State.Jump
+        if State.Noclip then
+            for _, p in pairs(char:GetDescendants()) do
+                if p:IsA("BasePart") then p.CanCollide = false end
             end
         end
-    end
-
-    for name, btn in pairs(tabButtons) do
-        btn.MouseButton1Click:Connect(function()
-            switchTab(name)
-        end)
-    end
-
-    -- ========== EVENTOS DOS BOTÕES ==========
-    minimizeBtn.MouseButton1Click:Connect(function()
-        isMinimized = true
-        mainFrame.Visible = false
-        if not floatButton then
-            floatButton = Instance.new("TextButton")
-            floatButton.Size = UDim2.new(0.12, 0, 0.08, 0)
-            floatButton.Position = UDim2.new(0.8, 0, 0.5, 0)
-            floatButton.BackgroundColor3 = Color3.fromRGB(100, 50, 255)
-            floatButton.Text = "Z"
-            floatButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-            floatButton.TextSize = 24
-            floatButton.Font = Enum.Font.GothamBold
-            floatButton.ZIndex = 10
-            floatButton.Parent = screenGui
-            local fCorner = Instance.new("UICorner")
-            fCorner.CornerRadius = UDim.new(0, 25)
-            fCorner.Parent = floatButton
-            local fStroke = Instance.new("UIStroke")
-            fStroke.Color = Color3.fromRGB(255, 255, 255)
-            fStroke.Thickness = 1
-            fStroke.Parent = floatButton
-
-            -- CORREÇÃO: Variáveis para distinguir arrasto de clique
-            local fDragging = false
-            local fDragStart, fStartPos
-            local hasMoved = false
-
-            floatButton.InputBegan:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-                    fDragging = true
-                    hasMoved = false
-                    fDragStart = input.Position
-                    fStartPos = floatButton.Position
-                end
-            end)
-
-            UserInputService.InputChanged:Connect(function(input)
-                if fDragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
-                    local delta = input.Position - fDragStart
-                    if math.abs(delta.X) > 5 or math.abs(delta.Y) > 5 then
-                        hasMoved = true
-                    end
-                    floatButton.Position = UDim2.new(
-                        fStartPos.X.Scale,
-                        fStartPos.X.Offset + delta.X,
-                        fStartPos.Y.Scale,
-                        fStartPos.Y.Offset + delta.Y
-                    )
-                end
-            end)
-
-            UserInputService.InputEnded:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-                    fDragging = false
-                end
-            end)
-
-            -- CORREÇÃO PRINCIPAL: Usar Activated para abrir
-            floatButton.Activated:Connect(function()
-                if not hasMoved then
-                    isMinimized = false
-                    floatButton:Destroy()
-                    floatButton = nil
-                    mainFrame.Visible = true
-                    mainFrame.Position = originalPosition
-                    TweenService:Create(mainFrame, TweenInfo.new(0.2), {Size = UDim2.new(0.9, 0, 0.75, 0)}):Play()
-                end
-            end)
-        end
-    end)
-
-    closeBtn.MouseButton1Click:Connect(function()
-        screenGui:Destroy()
-    end)
-
-    execBtn.MouseButton1Click:Connect(function()
-        local code = scriptBox.Text
-        if code ~= "" then
-            local success, err = pcall(function()
-                loadstring(code)()
-            end)
-            if success then
-                notify("Sucesso", "Script executado!", 2)
-                statusLabel.Text = "Status: Script executado"
-            else
-                notify("Erro", "Falha: " .. tostring(err), 3)
-            end
-        end
-    end)
-
-    clearBtn.MouseButton1Click:Connect(function()
-        scriptBox.Text = ""
-    end)
-
-    -- Toggles
-    flyToggle.MouseButton1Click:Connect(function()
-        flyEnabled = not flyEnabled
-        flyToggle.Text = "Fly: " .. (flyEnabled and "ON" or "OFF")
-        flyToggle.BackgroundColor3 = flyEnabled and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(200, 50, 50)
-        if flyEnabled then
-            notify("Fly", "Ativado! Use o joystick para voar.", 2)
-        end
-    end)
-
-    speedToggle.MouseButton1Click:Connect(function()
-        speedEnabled = not speedEnabled
-        speedToggle.Text = "Speed: " .. (speedEnabled and "ON" or "OFF")
-        speedToggle.BackgroundColor3 = speedEnabled and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(200, 50, 50)
-        if player.Character and player.Character:FindFirstChild("Humanoid") then
-            player.Character.Humanoid.WalkSpeed = speedEnabled and walkSpeed or 16
-        end
-    end)
-
-    infJumpToggle.MouseButton1Click:Connect(function()
-        infiniteJump = not infiniteJump
-        infJumpToggle.Text = "Infinite Jump: " .. (infiniteJump and "ON" or "OFF")
-        infJumpToggle.BackgroundColor3 = infiniteJump and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(200, 50, 50)
-    end)
-
-    espToggle.MouseButton1Click:Connect(function()
-        espSettings.enabled = not espSettings.enabled
-        espToggle.Text = "ESP Master: " .. (espSettings.enabled and "ON" or "OFF")
-        espToggle.BackgroundColor3 = espSettings.enabled and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(200, 50, 50)
-        if espSettings.enabled then
-            startESP()
-        else
-            stopESP()
-        end
-    end)
-
-    autoFarmToggle.MouseButton1Click:Connect(function()
-        autoFarmEnabled = not autoFarmEnabled
-        autoFarmToggle.Text = "Auto Farm: " .. (autoFarmEnabled and "ON" or "OFF")
-        autoFarmToggle.BackgroundColor3 = autoFarmEnabled and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(200, 50, 50)
-        if autoFarmEnabled then
-            notify("Auto Farm", "Procurando inimigos...", 2)
-        end
-    end)
-    end--[[ ZakyHub - Parte 4/4: Sistema ESP (Drawing Library), inicialização e loops de funções (infinite jump, auto farm) ]]
-
--- ==================== SISTEMA DE ESP (Drawing Library) ====================
-function startESP()
-    stopESP()
-    espConnections = {}
-
-    local function createESPForPlayer(plr)
-        if plr == player then return end
-        local drawings = {}
-        local char = plr.Character
-        if not char then return end
-        local root = char:FindFirstChild("HumanoidRootPart")
-        local hum = char:FindFirstChild("Humanoid")
-        if not root or not hum then return end
-
-        if espSettings.box then
-            local box = Drawing.new("Square")
-            box.Visible = false
-            box.Color = espSettings.boxColor
-            box.Thickness = 2
-            box.Filled = false
-            drawings.box = box
-        end
-        if espSettings.name then
-            local name = Drawing.new("Text")
-            name.Visible = false
-            name.Color = Color3.fromRGB(255, 255, 255)
-            name.Size = 16
-            name.Center = true
-            name.Outline = true
-            drawings.name = name
-        end
-        if espSettings.distance then
-            local dist = Drawing.new("Text")
-            dist.Visible = false
-            dist.Color = Color3.fromRGB(200, 200, 200)
-            dist.Size = 14
-            dist.Center = true
-            dist.Outline = true
-            drawings.distance = dist
-        end
-        if espSettings.health then
-            local healthBar = Drawing.new("Square")
-            healthBar.Visible = false
-            healthBar.Color = Color3.fromRGB(0, 255, 0)
-            healthBar.Filled = true
-            drawings.healthBar = healthBar
-            local healthBg = Drawing.new("Square")
-            healthBg.Visible = false
-            healthBg.Color = Color3.fromRGB(50, 50, 50)
-            healthBg.Filled = true
-            drawings.healthBg = healthBg
-        end
-        if espSettings.tracer then
-            local tracer = Drawing.new("Line")
-            tracer.Visible = false
-            tracer.Color = espSettings.tracerColor
-            tracer.Thickness = 1
-            drawings.tracer = tracer
-        end
-
-        espObjects[plr] = drawings
-    end
-
-    local function updateESP()
-        for plr, drawings in pairs(espObjects) do
-            local char = plr.Character
-            if not char then espObjects[plr] = nil continue end
-            local root = char:FindFirstChild("HumanoidRootPart")
-            local hum = char:FindFirstChild("Humanoid")
-            local head = char:FindFirstChild("Head")
-            if not root or not hum or not head then continue end
-
-            local pos, onScreen = Camera:WorldToViewportPoint(root.Position)
-            local distance = (player.Character and player.Character:FindFirstChild("HumanoidRootPart") and (root.Position - player.Character.HumanoidRootPart.Position).Magnitude) or 0
-
-            if onScreen and distance <= espSettings.maxDistance then
-                local scale = 1 / (distance * 0.01)
-                scale = math.clamp(scale, 0.5, 2)
-
-                if drawings.box then
-                    local headPos = Camera:WorldToViewportPoint((head.CFrame * CFrame.new(0, 1.5, 0)).Position)
-                    local footPos = Camera:WorldToViewportPoint((root.CFrame * CFrame.new(0, -2.5, 0)).Position)
-                    if headPos and footPos then
-                        local size = Vector2.new((headPos.Y - footPos.Y) * 0.6, headPos.Y - footPos.Y)
-                        drawings.box.Size = size
-                        drawings.box.Position = Vector2.new(headPos.X - size.X/2, headPos.Y)
-                        drawings.box.Visible = true
-                    end
-                end
-                if drawings.name then
-                    drawings.name.Text = plr.Name
-                    drawings.name.Position = Vector2.new(pos.X, pos.Y - 30 * scale)
-                    drawings.name.Size = 16 * scale
-                    drawings.name.Visible = true
-                end
-                if drawings.distance then
-                    drawings.distance.Text = string.format("%.0f m", distance)
-                    drawings.distance.Position = Vector2.new(pos.X, pos.Y - 15 * scale)
-                    drawings.distance.Size = 14 * scale
-                    drawings.distance.Visible = true
-                end
-                if drawings.healthBar then
-                    local healthPercent = hum.Health / hum.MaxHealth
-                    local barWidth = 40 * scale
-                    local barHeight = 4 * scale
-                    drawings.healthBg.Size = Vector2.new(barWidth, barHeight)
-                    drawings.healthBg.Position = Vector2.new(pos.X - barWidth/2, pos.Y + 20 * scale)
-                    drawings.healthBg.Visible = true
-                    drawings.healthBar.Size = Vector2.new(barWidth * healthPercent, barHeight)
-                    drawings.healthBar.Position = Vector2.new(pos.X - barWidth/2, pos.Y + 20 * scale)
-                    drawings.healthBar.Color = Color3.fromRGB(255 * (1 - healthPercent), 255 * healthPercent, 0)
-                    drawings.healthBar.Visible = true
-                end
-                if drawings.tracer then
-                    drawings.tracer.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
-                    drawings.tracer.To = Vector2.new(pos.X, pos.Y)
-                    drawings.tracer.Visible = true
-                end
-            else
-                for _, v in pairs(drawings) do v.Visible = false end
-            end
-        end
-    end
-
-    local function onPlayerAdded(plr)
-        createESPForPlayer(plr)
-    end
-    local function onPlayerRemoving(plr)
-        if espObjects[plr] then
-            for _, d in pairs(espObjects[plr]) do d:Remove() end
-            espObjects[plr] = nil
-        end
-    end
-
-    for _, plr in ipairs(Players:GetPlayers()) do
-        createESPForPlayer(plr)
-    end
-    table.insert(espConnections, Players.PlayerAdded:Connect(onPlayerAdded))
-    table.insert(espConnections, Players.PlayerRemoving:Connect(onPlayerRemoving))
-    table.insert(espConnections, RunService.RenderStepped:Connect(updateESP))
-end
-
-function stopESP()
-    for _, conn in ipairs(espConnections) do
-        conn:Disconnect()
-    end
-    espConnections = {}
-    for plr, drawings in pairs(espObjects) do
-        for _, d in pairs(drawings) do d:Remove() end
-        espObjects[plr] = nil
-    end
-end
-
--- ==================== INICIAR TUDO ====================
-createMainUI()
-notify("ZakyHub", "Carregado com sucesso!", 3)
-
--- ==================== LOOPS DE FUNÇÕES ====================
-UserInputService.JumpRequest:Connect(function()
-    if infiniteJump and player.Character and player.Character:FindFirstChild("Humanoid") then
-        player.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
     end
 end)
 
-spawn(function()
-    while true do
-        if autoFarmEnabled and player.Character then
-            local enemies = {}
-            for _, v in ipairs(workspace:GetDescendants()) do
-                if v:IsA("Model") and v:FindFirstChild("Humanoid") and v.Humanoid.Health > 0 and v ~= player.Character then
-                    local plr = Players:GetPlayerFromCharacter(v)
-                    if not plr or plr ~= player then
-                        table.insert(enemies, v)
+-- 2. ESP Tático (Highlights)
+task.spawn(function()
+    while task.wait(1) do
+        if State.Highlights then
+            for _, p in pairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer and p.Character then
+                    if not p.Character:FindFirstChild("ZakyHigh") then
+                        local h = Instance.new("Highlight", p.Character)
+                        h.Name = "ZakyHigh"; h.FillColor = Color3.new(1,0,0); h.FillTransparency = 0.5
                     end
                 end
             end
-            if #enemies > 0 then
-                local target = enemies[1]
-                local root = player.Character.HumanoidRootPart
-                local targetRoot = target:FindFirstChild("HumanoidRootPart")
-                if root and targetRoot then
-                    root.CFrame = targetRoot.CFrame * CFrame.new(0, 0, 2)
-                    local tool = player.Character:FindFirstChildOfClass("Tool")
-                    if tool then tool:Activate() end
-                end
-            end
         end
-        task.wait(0.5)
     end
 end)
+
+-- 3. Anti-AFK
+LocalPlayer.Idled:Connect(function()
+    if State.AntiAFK then
+        game:GetService("VirtualUser"):CaptureController()
+        game:GetService("VirtualUser"):ClickButton2(Vector2.new())
+    end
+end)
+
+-- // ADICIONANDO BOTÕES
+AddToggle("Ativar Noclip", function(v) State.Noclip = v end)
+AddToggle("Pulo Infinito", function(v) State.InfJump = v end)
+AddToggle("Realçar Jogadores (ESP)", function(v) State.Highlights = v end)
+AddToggle("Auto-Clicker", function(v) State.AutoClick = v end)
+
+-- Botão de FPS Boost
+local Boost = Instance.new("TextButton", Scroll)
+Boost.Size = UDim2.new(1, 0, 0, 35); Boost.Text = "OTIMIZAR FPS (BOOST)"; Boost.BackgroundColor3 = Color3.fromRGB(20, 40, 20)
+Boost.TextColor3 = Color3.new(1,1,1); Instance.new("UICorner", Boost)
+Boost.MouseButton1Click:Connect(function()
+    for _, v in pairs(game:GetDescendants()) do
+        if v:IsA("BlurEffect") or v:IsA("SunRaysEffect") then v.Enabled = false end
+    end
+    Status.Text = " STATUS: OTIMIZAÇÃO APLICADA!"
+end)
+
+-- // SISTEMA DE ARRASTAR
+local dragStart, startPos, dragging
+Header.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true; dragStart = i.Position; startPos = Main.Position end end)
+UIS.InputChanged:Connect(function(i) if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
+    local d = i.Position - dragStart
+    Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+end end)
+UIS.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
+
+-- // MINIMIZAR
+local MinBtn = Instance.new("TextButton", Header)
+MinBtn.Size = UDim2.new(0, 30, 0, 30); MinBtn.Position = UDim2.new(1, -70, 0, 5); MinBtn.Text = "-"
+MinBtn.MouseButton1Click:Connect(function()
+    local mini = Main.Size.Y.Offset < 100
+    TS:Create(Main, TweenInfo.new(0.3), {Size = mini and UDim2.new(0, 380, 0, 420) or UDim2.new(0, 180, 0, 40)}):Play()
+end)
+
+Status.Text = " STATUS: ZAKYHUB CARREGADO!"
